@@ -21,7 +21,7 @@ const siteverifyURL = "https://challenges.cloudflare.com/turnstile/v0/siteverify
 // TurnstileConfig enables bot protection on sign-up when Secret is set.
 type TurnstileConfig struct {
 	SiteKey   string   // public; sent to the browser
-	Secret    string   // from TURNSTILE_SECRET; never logged or sent to clients
+	Secret    string   // from TURNSTILE_SECRET_KEY; never logged or sent to clients
 	Hostnames []string // allowed hostnames reported by Siteverify
 	VerifyURL string   // override for tests
 }
@@ -34,10 +34,10 @@ func (t *TurnstileConfig) Validate() error {
 		return nil
 	}
 	if t.SiteKey == "" {
-		return fmt.Errorf("TURNSTILE_SECRET is set but TURNSTILE_SITE_KEY is empty")
+		return fmt.Errorf("TURNSTILE_SECRET_KEY is set but TURNSTILE_SITE_KEY is empty")
 	}
 	if len(t.Hostnames) == 0 {
-		return fmt.Errorf("TURNSTILE_SECRET is set but TURNSTILE_HOSTNAMES is empty; list the site's hostname(s)")
+		return fmt.Errorf("TURNSTILE_SECRET_KEY is set but TURNSTILE_HOSTNAMES is empty; list the site's hostname(s)")
 	}
 	return nil
 }

@@ -91,8 +91,8 @@ func main() {
 		limits = app.Limits{}
 		slog.Warn("rate limits disabled")
 	}
-	if os.Getenv("TURNSTILE_SECRET") == "" {
-		slog.Warn("TURNSTILE_SECRET not set; sign-up has no bot check")
+	if os.Getenv("TURNSTILE_SECRET_KEY") == "" {
+		slog.Warn("TURNSTILE_SECRET_KEY not set; sign-up has no bot check")
 	} else {
 		for _, h := range app.ParseHostnames(*tsHosts) {
 			if h == "localhost" || h == "127.0.0.1" {
@@ -107,7 +107,7 @@ func main() {
 		Web: advent.WebFS(), SecureCookies: *secure, ClientIPHeader: *ipHeader, Limits: limits, CalendarYear: *calYear,
 		// The secret is read only from the environment so it never appears
 		// in process arguments.
-		Turnstile: app.TurnstileConfig{SiteKey: *tsSiteKey, Secret: os.Getenv("TURNSTILE_SECRET"), Hostnames: app.ParseHostnames(*tsHosts)},
+		Turnstile: app.TurnstileConfig{SiteKey: *tsSiteKey, Secret: os.Getenv("TURNSTILE_SECRET_KEY"), Hostnames: app.ParseHostnames(*tsHosts)},
 	})
 	if err != nil {
 		slog.Error("start", "err", err)

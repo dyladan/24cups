@@ -119,7 +119,7 @@ rate limiting.
    docker compose up -d --build
    docker compose ps      # app should be "healthy"
    ```
-4. **Turnstile (bot check on sign-up):** set `TURNSTILE_SECRET` and
+4. **Turnstile (bot check on sign-up):** set `TURNSTILE_SECRET_KEY` and
    `TURNSTILE_HOSTNAMES` in `.env`. The hostnames must match the widget's
    domains in the Turnstile dashboard. The site key is public and set in
    `compose.yaml`. Each sign-up token is verified server-side with Cloudflare
@@ -155,7 +155,7 @@ docker build -t advent-cup . && docker run -p 8080:8080 -v advent-data:/data adv
 | `-secure-cookies` / `SECURE_COOKIES=true` | false | set when served over HTTPS |
 | `-client-ip-header` / `CLIENT_IP_HEADER` | none | trusted real-IP header, e.g. `CF-Connecting-IP` |
 | `-calendar-year` / `CALENDAR_YEAR` | 2026 | the December the calendar covers |
-| `TURNSTILE_SECRET` (env only) | none | enables the Turnstile check on sign-up |
+| `TURNSTILE_SECRET_KEY` (env only) | none | enables the Turnstile check on sign-up |
 | `-turnstile-site-key` / `TURNSTILE_SITE_KEY` | none | public widget key |
 | `-turnstile-hostnames` / `TURNSTILE_HOSTNAMES` | none | comma-separated allowed hostnames (required with a secret) |
 | `-no-rate-limits` / `NO_RATE_LIMITS=true` | false | benchmarks only |
