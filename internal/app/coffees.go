@@ -1,0 +1,400 @@
+package app
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"net/http"
+)
+
+type CoffeeInfo struct {
+	Name         string `json:"name"`
+	Origin       string `json:"origin"`
+	Region       string `json:"region"`
+	Producer     string `json:"producer"`
+	Process      string `json:"process"`
+	Variety      string `json:"variety"`
+	Elevation    string `json:"elevation"`
+	RoastLevel   string `json:"roastLevel"`
+	TastingNotes string `json:"tastingNotes"`
+	Description  string `json:"description"`
+}
+
+type Stats struct {
+	// AvgRating is on a 0–5 star scale. Each user's included brews are
+	// averaged first so a single prolific brewer can't dominate.
+	AvgRating   *float64 `json:"avgRating"`
+	RatingCount int      `json:"ratingCount"` // users who rated
+	BrewCount   int      `json:"brewCount"`   // rated brews counted
+	Opens       int      `json:"opens"`
+	Favorites   int      `json:"favorites"`
+}
+
+type Coffee struct {
+	ID          int64       `json:"id"`
+	Day         int         `json:"day"`
+	Opened      bool        `json:"opened"`
+	OpenedAt    *string     `json:"openedAt"`
+	Favorited   bool        `json:"favorited"`
+	Info        *CoffeeInfo `json:"info"`  // nil until opened (no spoilers)
+	Stats       *Stats      `json:"stats"` // nil until opened unless user reveals
+	MyAvg       *float64    `json:"myAvg"` // 0–5 scale
+	MyBrewCount int         `json:"myBrewCount"`
+}
+
+type CoffeeDetail struct {
+	Coffee
+	Distribution []int        `json:"distribution,omitempty"` // index 0 = ½★ … 9 = 5★
+	GroupStats   []GroupStats `json:"groupStats,omitempty"`
+}
+
+type GroupStats struct {
+	GroupID   int64  `json:"groupId"`
+	GroupName string `json:"groupName"`
+	Stats
+}
+
+// ---- seeding ----
+
+type seedCoffee struct {
+	Day int `json:"day"`
+	CoffeeInfo
+}
+
+// SeedCoffees upserts the calendar contents keyed by day.
+func SeedCoffees(db *sql.DB, data []byte) error {
+	var list []seedCoffee
+	if err := json.Unmarshal(data, &list); err != nil {
+		return fmt.Errorf("parse coffees: %w", err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, c := range list {
+		if c.Day <= 0 || c.Name == "" {
+			return fmt.Errorf("coffee entries need a positive day and a name (got day %d)", c.Day)
+		}
+		_, err := tx.Exec(`
+			INSERT INTO coffees(day, name, origin, region, producer, process, variety, elevation, roast_level, tasting_notes, description)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			ON CONFLICT(day) DO UPDATE SET
+				name=excluded.name, origin=excluded.origin, region=excluded.region, producer=excluded.producer,
+				process=excluded.process, variety=excluded.variety, elevation=excluded.elevation,
+				roast_level=excluded.roast_level, tasting_notes=excluded.tasting_notes, description=excluded.description`,
+			c.Day, c.Name, c.Origin, c.Region, c.Producer, c.Process, c.Variety, c.Elevation, c.RoastLevel, c.TastingNotes, c.Description)
+		if err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ---- stats ----
+
+// includedRatings selects ratings that count toward aggregate scores: all
+// public brews, plus private brews the owner didn't exclude.
+const includedRatings = `rating IS NOT NULL AND (is_public = 1 OR exclude_from_global = 0)`
+
+// computeStats returns stats per coffee id. If memberOf > 0 only members of
+// that group are counted.
+func (s *Server) computeStats(ctx context.Context, coffeeID, memberOf int64) (map[int64]*Stats, error) {
+	out := map[int64]*Stats{}
+	get := func(id int64) *Stats {
+		st, ok := out[id]
+		if !ok {
+			st = &Stats{}
+			out[id] = st
+		}
+		return st
+	}
+	userFilter, args := "", []any{}
+	if memberOf > 0 {
+		userFilter = ` AND user_id IN (SELECT user_id FROM group_members WHERE group_id = ?)`
+		args = append(args, memberOf)
+	}
+	coffeeFilter := ""
+	if coffeeID > 0 {
+		coffeeFilter = ` AND coffee_id = ?`
+		args = append(args, coffeeID)
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		WITH per_user AS (
+			SELECT coffee_id, user_id, AVG(rating) AS r, COUNT(*) AS n FROM brews
+			WHERE `+includedRatings+userFilter+coffeeFilter+`
+			GROUP BY coffee_id, user_id)
+		SELECT coffee_id, AVG(r), COUNT(*), SUM(n) FROM per_user GROUP BY coffee_id`, args...)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var id int64
+		var avg float64
+		st := &Stats{}
+		if err := rows.Scan(&id, &avg, &st.RatingCount, &st.BrewCount); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		a := avg / 2
+		st.AvgRating = &a
+		out[id] = st
+	}
+	rows.Close()
+
+	for _, q := range []struct {
+		table string
+		set   func(*Stats, int)
+	}{
+		{"coffee_opens", func(s *Stats, n int) { s.Opens = n }},
+		{"favorites", func(s *Stats, n int) { s.Favorites = n }},
+	} {
+		rows, err := s.db.QueryContext(ctx, `SELECT coffee_id, COUNT(*) FROM `+q.table+` WHERE 1=1`+userFilter+coffeeFilter+` GROUP BY coffee_id`, args...)
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var id int64
+			var n int
+			if err := rows.Scan(&id, &n); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			q.set(get(id), n)
+		}
+		rows.Close()
+	}
+	return out, rows.Err()
+}
+
+// ---- handlers ----
+
+func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Coffee, error) {
+	q := `
+		SELECT c.id, c.day, c.name, c.origin, c.region, c.producer, c.process, c.variety, c.elevation,
+		       c.roast_level, c.tasting_notes, c.description,
+		       o.opened_at, f.user_id IS NOT NULL,
+		       (SELECT AVG(rating) FROM brews b WHERE b.coffee_id = c.id AND b.user_id = ? AND b.rating IS NOT NULL),
+		       (SELECT COUNT(*) FROM brews b WHERE b.coffee_id = c.id AND b.user_id = ?)
+		FROM coffees c
+		LEFT JOIN coffee_opens o ON o.coffee_id = c.id AND o.user_id = ?
+		LEFT JOIN favorites f ON f.coffee_id = c.id AND f.user_id = ?`
+	args := []any{u.ID, u.ID, u.ID, u.ID}
+	if onlyID > 0 {
+		q += ` WHERE c.id = ?`
+		args = append(args, onlyID)
+	}
+	q += ` ORDER BY c.day`
+	// Compute stats first: the pool has a single connection, so no other
+	// query may run while rows is open.
+	stats, err := s.computeStats(ctx, onlyID, 0)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []*Coffee
+	for rows.Next() {
+		c := &Coffee{}
+		info := &CoffeeInfo{}
+		var myAvg *float64
+		if err := rows.Scan(&c.ID, &c.Day, &info.Name, &info.Origin, &info.Region, &info.Producer, &info.Process,
+			&info.Variety, &info.Elevation, &info.RoastLevel, &info.TastingNotes, &info.Description,
+			&c.OpenedAt, &c.Favorited, &myAvg, &c.MyBrewCount); err != nil {
+			return nil, err
+		}
+		c.Opened = c.OpenedAt != nil
+		if myAvg != nil {
+			v := *myAvg / 2
+			c.MyAvg = &v
+		}
+		if c.Opened {
+			c.Info = info
+		}
+		if c.Opened || u.RevealUnopened {
+			st := stats[c.ID]
+			if st == nil {
+				st = &Stats{}
+			}
+			c.Stats = st
+		}
+		list = append(list, c)
+	}
+	return list, rows.Err()
+}
+
+func (s *Server) listCoffees(w http.ResponseWriter, r *http.Request, u *User) error {
+	list, err := s.loadCoffees(r.Context(), u, 0)
+	if err != nil {
+		return err
+	}
+	if list == nil {
+		list = []*Coffee{}
+	}
+	writeJSON(w, 200, list)
+	return nil
+}
+
+func (s *Server) getCoffee(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	list, err := s.loadCoffees(r.Context(), u, id)
+	if err != nil {
+		return err
+	}
+	if len(list) == 0 {
+		return errNotFound
+	}
+	d := &CoffeeDetail{Coffee: *list[0]}
+	if d.Stats != nil {
+		d.Distribution = make([]int, 10)
+		rows, err := s.db.QueryContext(r.Context(),
+			`SELECT rating, COUNT(*) FROM brews WHERE coffee_id = ? AND `+includedRatings+` GROUP BY rating`, id)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			var rating, n int
+			if err := rows.Scan(&rating, &n); err != nil {
+				rows.Close()
+				return err
+			}
+			if rating >= 1 && rating <= 10 {
+				d.Distribution[rating-1] = n
+			}
+		}
+		rows.Close()
+
+		groups, err := s.db.QueryContext(r.Context(), `
+			SELECT g.id, g.name FROM groups g JOIN group_members m ON m.group_id = g.id
+			WHERE m.user_id = ? ORDER BY g.name`, u.ID)
+		if err != nil {
+			return err
+		}
+		type gref struct {
+			id   int64
+			name string
+		}
+		var refs []gref
+		for groups.Next() {
+			var g gref
+			if err := groups.Scan(&g.id, &g.name); err != nil {
+				groups.Close()
+				return err
+			}
+			refs = append(refs, g)
+		}
+		groups.Close()
+		for _, g := range refs {
+			st, err := s.computeStats(r.Context(), id, g.id)
+			if err != nil {
+				return err
+			}
+			gs := GroupStats{GroupID: g.id, GroupName: g.name}
+			if v := st[id]; v != nil {
+				gs.Stats = *v
+			}
+			d.GroupStats = append(d.GroupStats, gs)
+		}
+	}
+	writeJSON(w, 200, d)
+	return nil
+}
+
+func (s *Server) coffeeExists(ctx context.Context, id int64) error {
+	var x int
+	return s.db.QueryRowContext(ctx, `SELECT 1 FROM coffees WHERE id = ?`, id).Scan(&x)
+}
+
+func (s *Server) openCoffee(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	if err := s.coffeeExists(r.Context(), id); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(r.Context(),
+		`INSERT OR IGNORE INTO coffee_opens(user_id, coffee_id, opened_at) VALUES (?, ?, ?)`, u.ID, id, now()); err != nil {
+		return err
+	}
+	return noContent(w)
+}
+
+func (s *Server) unopenCoffee(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	var n int
+	s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM brews WHERE user_id = ? AND coffee_id = ?`, u.ID, id).Scan(&n)
+	if n > 0 {
+		return errf(409, "you have brews logged for this coffee; delete them first")
+	}
+	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM coffee_opens WHERE user_id = ? AND coffee_id = ?`, u.ID, id); err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM favorites WHERE user_id = ? AND coffee_id = ?`, u.ID, id); err != nil {
+		return err
+	}
+	return noContent(w)
+}
+
+func (s *Server) favoriteCoffee(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	if err := s.coffeeExists(r.Context(), id); err != nil {
+		return err
+	}
+	if !s.hasOpened(r.Context(), u.ID, id) {
+		return errf(409, "open this coffee before favoriting it")
+	}
+	if _, err := s.db.ExecContext(r.Context(),
+		`INSERT OR IGNORE INTO favorites(user_id, coffee_id, created_at) VALUES (?, ?, ?)`, u.ID, id, now()); err != nil {
+		return err
+	}
+	return noContent(w)
+}
+
+func (s *Server) unfavoriteCoffee(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM favorites WHERE user_id = ? AND coffee_id = ?`, u.ID, id); err != nil {
+		return err
+	}
+	return noContent(w)
+}
+
+func (s *Server) hasOpened(ctx context.Context, userID, coffeeID int64) bool {
+	var x int
+	return s.db.QueryRowContext(ctx, `SELECT 1 FROM coffee_opens WHERE user_id = ? AND coffee_id = ?`, userID, coffeeID).Scan(&x) == nil
+}
+
+func (s *Server) coffeeBrews(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	if !s.hasOpened(r.Context(), u.ID, id) {
+		writeJSON(w, 200, []*Brew{})
+		return nil
+	}
+	list, err := s.queryBrews(r.Context(), u, `b.coffee_id = ? AND (b.is_public = 1 OR b.user_id = ?)`, 100, id, u.ID)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 200, list)
+	return nil
+}
