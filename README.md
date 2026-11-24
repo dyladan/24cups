@@ -20,6 +20,21 @@ Lab or Fellow**.
 Global averages are computed **per user first** (each user's included brews are
 averaged), then averaged across users, so one prolific brewer can't skew a coffee.
 
+## Live updates
+
+Pages update in near real time over Server-Sent Events (`GET /api/events`).
+Events carry no data, only hints like "coffee data changed", which tell the
+browser which cached queries to refetch through the normal API. Privacy rules
+therefore apply exactly as they do for any other request. Your own changes
+aren't echoed back to the tab that made them; recipe, grinder, settings and
+my-brews hints go only to your own devices. A tab refetches everything after
+reconnecting.
+
+If you put a proxy in front, it must not buffer `text/event-stream` responses.
+Caddy and Cloudflare Tunnel work as is; nginx honors the `X-Accel-Buffering: no`
+header the server sends. Over plain HTTP/1.1, browsers allow about 6
+connections per site, so serve over HTTPS (HTTP/2) if people keep many tabs open.
+
 ## Stack
 
 Go (net/http, SQLite via pure-Go `modernc.org/sqlite`, bcrypt sessions) serving

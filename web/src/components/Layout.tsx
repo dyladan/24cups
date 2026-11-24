@@ -2,6 +2,7 @@ import { Link, Outlet, useNavigate } from '@tanstack/react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, Coffee, LogOut, Trophy, User as UserIcon, Users } from 'lucide-react'
 import { api, meQuery } from '../api'
+import { useLiveUpdates } from '../lib/live'
 
 const nav = [
   { to: '/', label: 'Calendar', icon: CalendarDays },
@@ -24,6 +25,7 @@ export function Logo() {
 
 export function Layout() {
   const { data: me } = useQuery(meQuery)
+  useLiveUpdates(!!me)
   const qc = useQueryClient()
   const navigate = useNavigate()
 

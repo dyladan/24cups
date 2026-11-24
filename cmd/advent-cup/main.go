@@ -48,14 +48,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	handler := app.NewServer(db, advent.WebFS(), *secure)
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           app.NewServer(db, advent.WebFS(), *secure),
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	srv.RegisterOnShutdown(handler.CloseStreams)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {

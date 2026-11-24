@@ -1,0 +1,178 @@
+package app
+
+import (
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"sync"
+	"time"
+)
+
+// Live updates over Server-Sent Events.
+//
+// Events never carry data, only TanStack Query key prefixes for the client to
+// invalidate. Each client then refetches through the normal API with its own
+// session, so visibility rules (private brews, unopened coffees, private
+// groups) are enforced exactly as for any other request.
+
+// Key is a query-key prefix, e.g. {"coffees"} or {"coffees", 3}.
+type Key []any
+
+var (
+	keyCoffees  = Key{"coffees"} // list, details and per-coffee brews
+	keyGroups   = Key{"groups"}
+	keyBrews    = Key{"brews"} // the user's own brew list
+	keyRecipes  = Key{"recipes"}
+	keyGrinders = Key{"grinders"}
+	keyMe       = Key{"me"}
+)
+
+type event struct {
+	Keys []Key `json:"keys"`
+
+	userID int64  // 0 = everyone, else only this user's streams
+	origin string // client id that caused it; that tab already refreshed itself
+}
+
+type subscriber struct {
+	userID int64
+	client string
+	ch     chan []byte
+}
+
+type broker struct {
+	mu     sync.Mutex
+	subs   map[*subscriber]struct{}
+	closed bool
+}
+
+func newBroker() *broker { return &broker{subs: map[*subscriber]struct{}{}} }
+
+func (b *broker) subscribe(userID int64, client string) *subscriber {
+	sub := &subscriber{userID: userID, client: client, ch: make(chan []byte, 32)}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed {
+		close(sub.ch)
+		return sub
+	}
+	b.subs[sub] = struct{}{}
+	return sub
+}
+
+func (b *broker) unsubscribe(sub *subscriber) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, ok := b.subs[sub]; ok {
+		delete(b.subs, sub)
+		close(sub.ch)
+	}
+}
+
+func (b *broker) publish(ev event) {
+	data, _ := json.Marshal(ev)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for sub := range b.subs {
+		if ev.userID != 0 && sub.userID != ev.userID {
+			continue
+		}
+		if ev.origin != "" && sub.client == ev.origin {
+			continue
+		}
+		select {
+		case sub.ch <- data:
+		default:
+			// Slow consumer: drop it. The browser reconnects and refetches
+			// everything, so nothing is lost.
+			delete(b.subs, sub)
+			close(sub.ch)
+		}
+	}
+}
+
+// closeAll ends every stream (used on shutdown so http.Server.Shutdown
+// doesn't wait on connections that never finish on their own).
+func (b *broker) closeAll() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.closed = true
+	for sub := range b.subs {
+		delete(b.subs, sub)
+		close(sub.ch)
+	}
+}
+
+// CloseStreams ends all live-update streams.
+func (s *Server) CloseStreams() { s.events.closeAll() }
+
+func clientID(r *http.Request) string {
+	id := r.Header.Get("X-Client-Id")
+	if len(id) > 64 {
+		return ""
+	}
+	return id
+}
+
+// notify tells every connected client to refetch the given keys.
+func (s *Server) notify(r *http.Request, keys ...Key) {
+	s.events.publish(event{Keys: keys, origin: clientID(r)})
+}
+
+// notifyUser tells only u's other tabs and devices.
+func (s *Server) notifyUser(r *http.Request, u *User, keys ...Key) {
+	s.events.publish(event{Keys: keys, userID: u.ID, origin: clientID(r)})
+}
+
+const heartbeat = 25 * time.Second
+
+func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, u *User) error {
+	rc := http.NewResponseController(w)
+	// The server's WriteTimeout would otherwise cut the stream after 30s.
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		return err
+	}
+	// Likewise ReadTimeout: when it expires the request context is canceled.
+	rc.SetReadDeadline(time.Time{})
+	client := r.URL.Query().Get("client")
+	if len(client) > 64 {
+		client = ""
+	}
+	sub := s.events.subscribe(u.ID, client)
+	defer s.events.unsubscribe(sub)
+
+	h := w.Header()
+	h.Set("Content-Type", "text/event-stream")
+	h.Set("Cache-Control", "no-cache, no-transform")
+	h.Set("X-Accel-Buffering", "no") // nginx and friends: don't buffer
+	w.WriteHeader(http.StatusOK)
+	// Tell the browser how long to wait before reconnecting.
+	fmt.Fprint(w, "retry: 3000\n: connected\n\n")
+	if err := rc.Flush(); err != nil {
+		return nil
+	}
+
+	tick := time.NewTicker(heartbeat)
+	defer tick.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return nil
+		case data, ok := <-sub.ch:
+			if !ok {
+				return nil
+			}
+			if _, err := fmt.Fprintf(w, "event: invalidate\ndata: %s\n\n", data); err != nil {
+				return nil
+			}
+		case <-tick.C:
+			// Comment line keeps proxies and NATs from idling us out.
+			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
+				return nil
+			}
+		}
+		if err := rc.Flush(); err != nil {
+			return nil
+		}
+	}
+}

@@ -5,10 +5,10 @@ import "net/http"
 // Catalog entries are suggestions only; users can always type a custom value.
 
 type CatalogGrinder struct {
-	Model       string `json:"model"`
-	Type        string `json:"type"` // hand, electric
-	StockBurrs  string `json:"stockBurrs"`
-	BurrSizeMM  int    `json:"burrSizeMm,omitempty"`
+	Model        string `json:"model"`
+	Type         string `json:"type"` // hand, electric
+	StockBurrs   string `json:"stockBurrs"`
+	BurrSizeMM   int    `json:"burrSizeMm,omitempty"`
 	BurrGeometry string `json:"burrGeometry"` // flat, conical
 }
 

@@ -170,6 +170,7 @@ func (s *Server) createGroup(w http.ResponseWriter, r *http.Request, u *User) er
 	if err != nil {
 		return err
 	}
+	s.notify(r, keyGroups, keyCoffees)
 	writeJSON(w, 201, g)
 	return nil
 }
@@ -282,6 +283,7 @@ func (s *Server) updateGroup(w http.ResponseWriter, r *http.Request, u *User) er
 	if err != nil {
 		return err
 	}
+	s.notify(r, keyGroups, keyCoffees)
 	writeJSON(w, 200, g)
 	return nil
 }
@@ -297,6 +299,7 @@ func (s *Server) deleteGroup(w http.ResponseWriter, r *http.Request, u *User) er
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM groups WHERE id = ?`, id); err != nil {
 		return err
 	}
+	s.notify(r, keyGroups, keyCoffees)
 	return noContent(w)
 }
 
@@ -325,6 +328,7 @@ func (s *Server) joinPublicGroup(w http.ResponseWriter, r *http.Request, u *User
 	if err != nil {
 		return err
 	}
+	s.notify(r, keyGroups, keyCoffees)
 	writeJSON(w, 200, g)
 	return nil
 }
@@ -355,6 +359,7 @@ func (s *Server) joinGroupByCode(w http.ResponseWriter, r *http.Request, u *User
 	if err != nil {
 		return err
 	}
+	s.notify(r, keyGroups, keyCoffees)
 	writeJSON(w, 200, g)
 	return nil
 }
@@ -374,6 +379,7 @@ func (s *Server) leaveGroup(w http.ResponseWriter, r *http.Request, u *User) err
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM group_members WHERE group_id = ? AND user_id = ?`, id, u.ID); err != nil {
 		return err
 	}
+	s.notify(r, keyGroups, keyCoffees)
 	return noContent(w)
 }
 
@@ -389,6 +395,7 @@ func (s *Server) regenerateInvite(w http.ResponseWriter, r *http.Request, u *Use
 	if _, err := s.db.ExecContext(r.Context(), `UPDATE groups SET invite_code = ? WHERE id = ?`, code, id); err != nil {
 		return err
 	}
+	s.notify(r, keyGroups, keyCoffees)
 	writeJSON(w, 200, map[string]string{"inviteCode": code})
 	return nil
 }
@@ -411,5 +418,6 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request, u *User) e
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM group_members WHERE group_id = ? AND user_id = ?`, id, uid); err != nil {
 		return err
 	}
+	s.notify(r, keyGroups, keyCoffees)
 	return noContent(w)
 }

@@ -19,10 +19,11 @@ type Server struct {
 	web           fs.FS
 	secureCookies bool
 	mux           *http.ServeMux
+	events        *broker
 }
 
 func NewServer(db *sql.DB, web fs.FS, secureCookies bool) *Server {
-	s := &Server{db: db, web: web, secureCookies: secureCookies, mux: http.NewServeMux()}
+	s := &Server{db: db, web: web, secureCookies: secureCookies, mux: http.NewServeMux(), events: newBroker()}
 	s.routes()
 	return s
 }
@@ -61,6 +62,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/me/password", s.authed(s.changePassword))
 
 	m.HandleFunc("GET /api/catalog", s.h(s.catalog))
+	m.HandleFunc("GET /api/events", s.authed(s.streamEvents))
 
 	// coffees
 	m.HandleFunc("GET /api/coffees", s.authed(s.listCoffees))

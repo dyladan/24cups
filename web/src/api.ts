@@ -155,10 +155,14 @@ export class ApiError extends Error {
   }
 }
 
+/** Identifies this tab so the server doesn't echo our own changes back over SSE. */
+export const clientId = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2)
+
 export async function api<T>(path: string, init: RequestInit & { json?: unknown } = {}): Promise<T> {
   const { json, ...rest } = init
   const headers = new Headers(rest.headers)
   headers.set('X-Requested-With', 'fetch')
+  headers.set('X-Client-Id', clientId)
   if (json !== undefined) headers.set('Content-Type', 'application/json')
   const res = await fetch(`/api${path}`, {
     ...rest,

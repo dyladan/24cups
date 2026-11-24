@@ -103,6 +103,7 @@ func (s *Server) createRecipe(w http.ResponseWriter, r *http.Request, u *User) e
 		return err
 	}
 	in.ID, _ = res.LastInsertId()
+	s.notifyUser(r, u, keyRecipes)
 	writeJSON(w, 201, in)
 	return nil
 }
@@ -127,6 +128,7 @@ func (s *Server) updateRecipe(w http.ResponseWriter, r *http.Request, u *User) e
 		return errNotFound
 	}
 	in.ID = id
+	s.notifyUser(r, u, keyRecipes)
 	writeJSON(w, 200, in)
 	return nil
 }
@@ -139,6 +141,7 @@ func (s *Server) deleteRecipe(w http.ResponseWriter, r *http.Request, u *User) e
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM recipes WHERE id = ? AND user_id = ?`, id, u.ID); err != nil {
 		return err
 	}
+	s.notifyUser(r, u, keyRecipes)
 	return noContent(w)
 }
 
@@ -249,6 +252,7 @@ func (s *Server) createGrinder(w http.ResponseWriter, r *http.Request, u *User) 
 		return err
 	}
 	in.ID, _ = res.LastInsertId()
+	s.notifyUser(r, u, keyGrinders)
 	writeJSON(w, 201, in)
 	return nil
 }
@@ -272,6 +276,7 @@ func (s *Server) updateGrinder(w http.ResponseWriter, r *http.Request, u *User) 
 		return errNotFound
 	}
 	in.ID = id
+	s.notifyUser(r, u, keyGrinders)
 	writeJSON(w, 200, in)
 	return nil
 }
@@ -284,5 +289,6 @@ func (s *Server) deleteGrinder(w http.ResponseWriter, r *http.Request, u *User) 
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM grinders WHERE id = ? AND user_id = ?`, id, u.ID); err != nil {
 		return err
 	}
+	s.notifyUser(r, u, keyGrinders)
 	return noContent(w)
 }

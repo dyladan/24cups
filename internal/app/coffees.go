@@ -326,6 +326,7 @@ func (s *Server) openCoffee(w http.ResponseWriter, r *http.Request, u *User) err
 		`INSERT OR IGNORE INTO coffee_opens(user_id, coffee_id, opened_at) VALUES (?, ?, ?)`, u.ID, id, now()); err != nil {
 		return err
 	}
+	s.notify(r, keyCoffees, keyGroups)
 	return noContent(w)
 }
 
@@ -345,6 +346,7 @@ func (s *Server) unopenCoffee(w http.ResponseWriter, r *http.Request, u *User) e
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM favorites WHERE user_id = ? AND coffee_id = ?`, u.ID, id); err != nil {
 		return err
 	}
+	s.notify(r, keyCoffees, keyGroups)
 	return noContent(w)
 }
 
@@ -363,6 +365,7 @@ func (s *Server) favoriteCoffee(w http.ResponseWriter, r *http.Request, u *User)
 		`INSERT OR IGNORE INTO favorites(user_id, coffee_id, created_at) VALUES (?, ?, ?)`, u.ID, id, now()); err != nil {
 		return err
 	}
+	s.notify(r, keyCoffees, keyGroups)
 	return noContent(w)
 }
 
@@ -374,6 +377,7 @@ func (s *Server) unfavoriteCoffee(w http.ResponseWriter, r *http.Request, u *Use
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM favorites WHERE user_id = ? AND coffee_id = ?`, u.ID, id); err != nil {
 		return err
 	}
+	s.notify(r, keyCoffees, keyGroups)
 	return noContent(w)
 }
 

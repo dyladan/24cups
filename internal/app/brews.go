@@ -208,6 +208,7 @@ func (s *Server) createBrew(w http.ResponseWriter, r *http.Request, u *User) err
 		return err
 	}
 	id, _ := res.LastInsertId()
+	s.brewChanged(r, u)
 	list, err := s.queryBrews(r.Context(), u, `b.id = ?`, 1, id)
 	if err != nil {
 		return err
@@ -250,6 +251,7 @@ func (s *Server) updateBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	s.brewChanged(r, u)
 	list, err := s.queryBrews(r.Context(), u, `b.id = ?`, 1, id)
 	if err != nil {
 		return err
@@ -266,5 +268,14 @@ func (s *Server) deleteBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM brews WHERE id = ? AND user_id = ?`, id, u.ID); err != nil {
 		return err
 	}
+	s.brewChanged(r, u)
 	return noContent(w)
+}
+
+// brewChanged covers stats, coffee brew lists, group feeds and the owner's
+// own brew list. Private brews still move averages unless excluded, so
+// everyone is told; they refetch only what they're allowed to see.
+func (s *Server) brewChanged(r *http.Request, u *User) {
+	s.notify(r, keyCoffees, keyGroups)
+	s.notifyUser(r, u, keyBrews)
 }

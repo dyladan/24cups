@@ -216,6 +216,10 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u *User) error
 		u.DisplayName, boolInt(u.RevealUnopened), u.TempUnit, u.ID); err != nil {
 		return err
 	}
+	s.notifyUser(r, u, keyMe, keyCoffees, keyGroups)
+	if in.DisplayName != nil {
+		s.notify(r, keyCoffees, keyGroups)
+	}
 	writeJSON(w, 200, u)
 	return nil
 }
