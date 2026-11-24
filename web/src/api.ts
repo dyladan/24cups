@@ -1,4 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { CoffeeView } from './lib/anon'
 
 // ---------- types ----------
 
@@ -202,16 +203,20 @@ export const catalogQuery = queryOptions({
   staleTime: Infinity,
 })
 
-export const coffeesQuery = queryOptions({
-  queryKey: ['coffees'],
-  queryFn: () => api<Coffee[]>('/coffees'),
-})
+/** Query string for signed-out visitors' view (ignored for signed-in users). */
+function viewQS(view: CoffeeView | null | undefined): string {
+  if (!view) return ''
+  return `?today=${view.today}${view.spoilers ? '&spoilers=1' : ''}`
+}
 
-export const coffeeQuery = (id: number) =>
-  queryOptions({ queryKey: ['coffees', id], queryFn: () => api<CoffeeDetail>(`/coffees/${id}`) })
+export const coffeesQuery = (view: CoffeeView | null = null) =>
+  queryOptions({ queryKey: ['coffees', 'list', view], queryFn: () => api<Coffee[]>(`/coffees${viewQS(view)}`) })
 
-export const coffeeBrewsQuery = (id: number) =>
-  queryOptions({ queryKey: ['coffees', id, 'brews'], queryFn: () => api<Brew[]>(`/coffees/${id}/brews`) })
+export const coffeeQuery = (id: number, view: CoffeeView | null = null) =>
+  queryOptions({ queryKey: ['coffees', id, view], queryFn: () => api<CoffeeDetail>(`/coffees/${id}${viewQS(view)}`) })
+
+export const coffeeBrewsQuery = (id: number, view: CoffeeView | null = null) =>
+  queryOptions({ queryKey: ['coffees', id, 'brews', view], queryFn: () => api<Brew[]>(`/coffees/${id}/brews${viewQS(view)}`) })
 
 export const recipesQuery = queryOptions({ queryKey: ['recipes'], queryFn: () => api<Recipe[]>('/recipes') })
 export const grindersQuery = queryOptions({ queryKey: ['grinders'], queryFn: () => api<Grinder[]>('/grinders') })

@@ -19,7 +19,7 @@ const sorters: Record<SortKey, (a: Coffee, b: Coffee) => number> = {
 }
 
 export function RankingsPage() {
-  const { data, isPending, error } = useQuery(coffeesQuery)
+  const { data, isPending, error } = useQuery(coffeesQuery())
   const [sort, setSort] = useState<SortKey>('global')
   if (isPending) return <Spinner />
   if (error) return <ErrorText error={error} />

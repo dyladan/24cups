@@ -6,6 +6,11 @@ Lab or Fellow**.
 
 - **Calendar**: one door per day. Unopened doors hide the coffee. You can open
   a door without logging a brew.
+- **Signed-out visitors** see the calendar with doors open up to their local
+  date. A date ahead of the earliest time zone on Earth (UTC+14) isn't
+  honored, so tomorrow can't be unlocked early. They see tasting notes; community ratings and
+  public brews show only with the **Spoilers** switch in the header (saved
+  on the device). The December is set with `-calendar-year` / `CALENDAR_YEAR`.
 - **Blind tasting** (default): after opening a coffee, its tasting notes,
   community scores and other people's brews stay hidden until you log a rated
   brew or tap "Reveal now". This is enforced by the API, not just the UI. Profile → Spoilers can
@@ -109,6 +114,7 @@ docker build -t advent-cup . && docker run -p 8080:8080 -v advent-data:/data adv
 | `-coffees` / `COFFEES_FILE` | embedded `data/coffees.json` | calendar contents |
 | `-secure-cookies` / `SECURE_COOKIES=true` | false | set when served over HTTPS |
 | `-client-ip-header` / `CLIENT_IP_HEADER` | none | trusted real-IP header, e.g. `CF-Connecting-IP` |
+| `-calendar-year` / `CALENDAR_YEAR` | 2026 | the December the calendar covers |
 | `-no-rate-limits` / `NO_RATE_LIMITS=true` | false | benchmarks only |
 
 ## Calendar contents

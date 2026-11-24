@@ -58,10 +58,20 @@ const appRoute = createRoute({
   pendingComponent: Spinner,
 })
 
-const calendarRoute = createRoute({ getParentRoute: () => appRoute, path: '/', component: CalendarPage })
+// Pages signed-out visitors can see too.
+const publicRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  id: 'public',
+  beforeLoad: async ({ context }) => {
+    await context.queryClient.ensureQueryData(meQuery)
+  },
+  pendingComponent: Spinner,
+})
+
+const calendarRoute = createRoute({ getParentRoute: () => publicRoute, path: '/', component: CalendarPage })
 
 const coffeeRoute = createRoute({
-  getParentRoute: () => appRoute,
+  getParentRoute: () => publicRoute,
   path: '/coffee/$coffeeId',
   params: {
     parse: (p) => ({ coffeeId: Number(p.coffeeId) }),
@@ -108,9 +118,8 @@ const profileRoute = createRoute({ getParentRoute: () => appRoute, path: '/profi
 const routeTree = rootRoute.addChildren([
   loginRoute,
   registerRoute,
+  publicRoute.addChildren([calendarRoute, coffeeRoute]),
   appRoute.addChildren([
-    calendarRoute,
-    coffeeRoute,
     rankingsRoute,
     brewsRoute,
     newBrewRoute,

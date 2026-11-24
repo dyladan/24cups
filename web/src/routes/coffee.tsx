@@ -7,8 +7,9 @@ import { BrewCard } from '../components/BrewCard'
 import { Blossom, Empty, ErrorText, Spinner, Stars, TastingNotes } from '../components/ui'
 import { formatRating, plural } from '../lib/format'
 import { StatRow } from './calendar'
+import { useAnonSpoilers, useCoffeeView } from '../lib/anon'
 
-const route = getRouteApi('/app/coffee/$coffeeId')
+const route = getRouteApi('/public/coffee/$coffeeId')
 
 function Distribution({ dist }: { dist: number[] }) {
   const max = Math.max(1, ...dist)
@@ -53,6 +54,26 @@ function BlindPanel({ c, onReveal, pending }: { c: CoffeeDetail; onReveal: () =>
           <Eye size={16} /> Reveal now
         </button>
       </div>
+    </section>
+  )
+}
+
+/** Signed-out visitors with spoilers off. */
+function AnonSpoilerPanel({ c, onShow }: { c: CoffeeDetail; onShow: () => void }) {
+  return (
+    <section className="card p-5">
+      <p className="eyebrow mb-3 flex items-center gap-1.5">
+        <EyeOff size={13} /> Ratings hidden
+      </p>
+      <p className="text-sm text-ink-2">Community ratings are spoilers, so they’re off by default.</p>
+      {c.stats && (
+        <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-ink-3 tabular-nums">
+          <Eye size={13} /> {plural(c.stats.opens, 'member has', 'members have')} opened this door
+        </p>
+      )}
+      <button className="btn btn-ghost mt-4" onClick={onShow}>
+        <Eye size={16} /> Show spoilers
+      </button>
     </section>
   )
 }
@@ -111,9 +132,11 @@ function StatsPanel({ c }: { c: CoffeeDetail }) {
 
 export function CoffeePage() {
   const { coffeeId } = route.useParams()
-  const { data: c, isPending, error } = useQuery(coffeeQuery(coffeeId))
-  const { data: all } = useQuery(coffeesQuery)
-  const { data: brews } = useQuery({ ...coffeeBrewsQuery(coffeeId), enabled: !!c?.opened })
+  const { view, ready, anon } = useCoffeeView()
+  const [, setSpoilers] = useAnonSpoilers()
+  const { data: c, isPending, error } = useQuery({ ...coffeeQuery(coffeeId, view), enabled: ready })
+  const { data: all } = useQuery({ ...coffeesQuery(view), enabled: ready })
+  const { data: brews } = useQuery({ ...coffeeBrewsQuery(coffeeId, view), enabled: ready && !!c?.revealed })
 
   const open = useApiMutation(() => api(`/coffees/${coffeeId}/open`, { method: 'POST' }), coffeeKeys)
   const unopen = useApiMutation(() => api(`/coffees/${coffeeId}/open`, { method: 'DELETE' }), coffeeKeys)
@@ -164,10 +187,21 @@ export function CoffeePage() {
             <span className="display !text-door-ink text-[7rem]">{String(c.day).padStart(2, '0')}</span>
           </div>
           <h1 className="display mt-8 text-3xl">Still sealed</h1>
-          <p className="mt-2 text-ink-2">Opening reveals the coffee, its community scores and everyone’s brews. You don’t have to log a brew to open it.</p>
-          <button className="btn btn-accent mt-6" onClick={() => open.mutate()} disabled={open.isPending}>
-            <DoorOpen size={18} /> Open door {c.day}
-          </button>
+          {anon ? (
+            <>
+              <p className="mt-2 text-ink-2">Door {c.day} opens on December {c.day}. Join to open doors early, log your brews and rate the lineup.</p>
+              <Link to="/register" search={{ redirect: `/coffee/${c.id}` }} className="btn btn-accent mt-6">
+                Join to log &amp; rate
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="mt-2 text-ink-2">Opening reveals the coffee. You don’t have to log a brew to open it.</p>
+              <button className="btn btn-accent mt-6" onClick={() => open.mutate()} disabled={open.isPending}>
+                <DoorOpen size={18} /> Open door {c.day}
+              </button>
+            </>
+          )}
           <ErrorText error={open.error} />
           {c.stats && (
             <div className="card mt-8 p-4 text-left">
@@ -203,7 +237,7 @@ export function CoffeePage() {
             {info.origin && ` · ${info.origin}`}
           </p>
           <h1 className="display text-5xl sm:text-6xl">{info.name}</h1>
-          {c.revealed ? (
+          {c.revealed || anon ? (
             <TastingNotes notes={info.tastingNotes} className="mt-4 !text-sm" />
           ) : (
             <p className="notes mt-4 inline-flex items-center gap-1.5 !text-ink-3">
@@ -211,6 +245,13 @@ export function CoffeePage() {
             </p>
           )}
 
+          {anon ? (
+            <div className="mt-5">
+              <Link to="/register" search={{ redirect: `/coffee/${c.id}` }} className="btn btn-accent">
+                Join to log &amp; rate
+              </Link>
+            </div>
+          ) : (
           <div className="mt-5 flex flex-wrap gap-2">
             <Link to="/brews/new" search={{ coffeeId: c.id }} className="btn btn-accent">
               <Plus size={18} /> Log a brew
@@ -225,6 +266,7 @@ export function CoffeePage() {
               {c.favorited ? 'Favorited' : 'Favorite'}
             </button>
           </div>
+          )}
 
           {facts.length > 0 && (
             <dl className="mt-8 grid grid-cols-2 gap-x-6 gap-y-4 border-y border-line py-5 sm:grid-cols-3">
@@ -238,6 +280,7 @@ export function CoffeePage() {
           )}
           {info.description && <p className="mt-6 max-w-prose leading-relaxed text-ink-2">{info.description}</p>}
 
+          {!anon && (
           <section className="mt-10">
             <h2 className="display mb-4 text-2xl">Your brews</h2>
             {mine.length ? (
@@ -256,11 +299,22 @@ export function CoffeePage() {
               </Empty>
             )}
           </section>
+          )}
 
           <section className="mt-10">
             <h2 className="display mb-4 text-2xl">Community brews</h2>
             {!c.revealed ? (
-              <Empty>Hidden until you rate this coffee, so other people’s ratings don’t sway yours.</Empty>
+              anon ? (
+                <Empty>
+                  Brews include ratings, so they’re hidden.{' '}
+                  <button className="font-semibold text-ink underline underline-offset-4" onClick={() => setSpoilers(true)}>
+                    Turn on spoilers
+                  </button>{' '}
+                  to see them.
+                </Empty>
+              ) : (
+                <Empty>Hidden until you rate this coffee, so other people’s ratings don’t sway yours.</Empty>
+              )
             ) : others.length ? (
               <div className="space-y-3">
                 {others.map((b) => (
@@ -274,8 +328,14 @@ export function CoffeePage() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          {c.revealed ? <StatsPanel c={c} /> : <BlindPanel c={c} onReveal={() => reveal.mutate()} pending={reveal.isPending} />}
-          {c.myBrewCount === 0 && (
+          {c.revealed ? (
+            <StatsPanel c={c} />
+          ) : anon ? (
+            <AnonSpoilerPanel c={c} onShow={() => setSpoilers(true)} />
+          ) : (
+            <BlindPanel c={c} onReveal={() => reveal.mutate()} pending={reveal.isPending} />
+          )}
+          {!anon && c.myBrewCount === 0 && (
             <button className="inline-flex items-center gap-1.5 text-xs text-ink-3 hover:text-ink" onClick={() => unopen.mutate()} disabled={unopen.isPending}>
               <Undo2 size={13} /> Opened by mistake? Close this door
             </button>

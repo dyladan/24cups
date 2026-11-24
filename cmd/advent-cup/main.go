@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -22,12 +23,20 @@ func envOr(k, def string) string {
 	return def
 }
 
+func envInt(k string, def int) int {
+	if v, err := strconv.Atoi(os.Getenv(k)); err == nil {
+		return v
+	}
+	return def
+}
+
 func main() {
 	addr := flag.String("addr", envOr("ADDR", ":8080"), "listen address")
 	dbPath := flag.String("db", envOr("DB_PATH", "advent.db"), "SQLite database path")
 	coffees := flag.String("coffees", envOr("COFFEES_FILE", ""), "JSON file of calendar coffees (defaults to the embedded list)")
 	secure := flag.Bool("secure-cookies", envOr("SECURE_COOKIES", "false") == "true", "mark session cookies Secure (set when served over HTTPS)")
 	ipHeader := flag.String("client-ip-header", envOr("CLIENT_IP_HEADER", ""), "trusted header with the real client IP, e.g. CF-Connecting-IP (only if the app is reachable solely through that proxy)")
+	calYear := flag.Int("calendar-year", envInt("CALENDAR_YEAR", 2026), "year of the December the calendar covers (unlocks doors for signed-out visitors)")
 	noLimits := flag.Bool("no-rate-limits", envOr("NO_RATE_LIMITS", "false") == "true", "disable rate limits (benchmarks only)")
 	flag.Parse()
 
@@ -65,7 +74,7 @@ func main() {
 		slog.Warn("no -client-ip-header set; behind a proxy or tunnel every client shares one rate-limit bucket")
 	}
 	handler, err := app.NewServer(db, rdb, app.Options{
-		Web: advent.WebFS(), SecureCookies: *secure, ClientIPHeader: *ipHeader, Limits: limits,
+		Web: advent.WebFS(), SecureCookies: *secure, ClientIPHeader: *ipHeader, Limits: limits, CalendarYear: *calYear,
 	})
 	if err != nil {
 		slog.Error("start", "err", err)

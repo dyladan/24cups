@@ -1,8 +1,10 @@
-import { Link, Outlet, useNavigate } from '@tanstack/react-router'
+import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
+import clsx from 'clsx'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CalendarDays, Coffee, LogOut, Trophy, User as UserIcon, Users } from 'lucide-react'
+import { CalendarDays, Coffee, Eye, EyeOff, LogOut, Trophy, User as UserIcon, Users } from 'lucide-react'
 import { api, meQuery } from '../api'
 import { useLiveUpdates } from '../lib/live'
+import { useAnonSpoilers } from '../lib/anon'
 
 const nav = [
   { to: '/', label: 'Calendar', icon: CalendarDays },
@@ -20,6 +22,39 @@ export function Logo() {
         Advent<span className="text-accent"> Cup</span>
       </span>
     </Link>
+  )
+}
+
+/** Header controls for signed-out visitors. */
+function AnonNav() {
+  const [spoilers, setSpoilers] = useAnonSpoilers()
+  const href = useRouterState({ select: (st) => st.location.href })
+  return (
+    <div className="flex items-center gap-2 sm:gap-3">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={spoilers}
+        onClick={() => setSpoilers(!spoilers)}
+        title={spoilers ? 'Hide community ratings' : 'Show community ratings'}
+        className={clsx(
+          'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+          spoilers ? 'border-gold bg-gold/15 text-ink' : 'border-line text-ink-2 hover:text-ink',
+        )}
+      >
+        {spoilers ? <Eye size={15} /> : <EyeOff size={15} />}
+        <span>Spoilers</span>
+        <span className={clsx('rounded-full px-1.5 text-[0.6rem] uppercase', spoilers ? 'bg-gold text-paper' : 'bg-paper-2')}>
+          {spoilers ? 'on' : 'off'}
+        </span>
+      </button>
+      <Link to="/login" search={{ redirect: href }} className="hidden text-sm font-semibold text-ink-2 hover:text-ink sm:inline">
+        Sign in
+      </Link>
+      <Link to="/register" search={{ redirect: href }} className="btn btn-primary !px-3.5 !py-1.5 text-xs sm:!text-sm">
+        Join
+      </Link>
+    </div>
   )
 }
 
@@ -41,6 +76,7 @@ export function Layout() {
       <header className="gold-rule sticky top-0 z-30 bg-paper/85 backdrop-blur-md pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <Logo />
+          {me === null && <AnonNav />}
           {me && (
             <nav className="hidden items-center gap-1 md:flex">
               {nav.map((n) => (

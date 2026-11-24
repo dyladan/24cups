@@ -12,6 +12,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Server struct {
@@ -24,6 +25,8 @@ type Server struct {
 	events        *broker
 	guards        *guards
 	ipHeader      string
+	calendarYear  int
+	now           func() time.Time
 }
 
 // Options configures a Server.
@@ -35,6 +38,11 @@ type Options struct {
 	// Leave empty unless the app is only reachable through that proxy.
 	ClientIPHeader string
 	Limits         Limits
+	// CalendarYear is the December the calendar belongs to (for anonymous
+	// visitors' door unlocking). Defaults to the current year.
+	CalendarYear int
+	// Now overrides the clock (tests).
+	Now func() time.Time
 }
 
 func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
@@ -46,6 +54,13 @@ func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
 		db: db, rdb: rdb, stats: stats, web: opts.Web, secureCookies: opts.SecureCookies,
 		mux: http.NewServeMux(), events: newBroker(opts.Limits),
 		guards: newGuards(opts.Limits), ipHeader: http.CanonicalHeaderKey(opts.ClientIPHeader),
+		calendarYear: opts.CalendarYear, now: opts.Now,
+	}
+	if s.now == nil {
+		s.now = time.Now
+	}
+	if s.calendarYear == 0 {
+		s.calendarYear = s.now().Year()
 	}
 	s.routes()
 	return s, nil
@@ -109,14 +124,14 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/events", s.authed(s.streamEvents))
 
 	// coffees
-	m.HandleFunc("GET /api/coffees", s.authed(s.listCoffees))
-	m.HandleFunc("GET /api/coffees/{id}", s.authed(s.getCoffee))
+	m.HandleFunc("GET /api/coffees", s.maybeAuthed(s.listCoffees))
+	m.HandleFunc("GET /api/coffees/{id}", s.maybeAuthed(s.getCoffee))
 	m.HandleFunc("POST /api/coffees/{id}/open", s.authed(s.openCoffee))
 	m.HandleFunc("DELETE /api/coffees/{id}/open", s.authed(s.unopenCoffee))
 	m.HandleFunc("POST /api/coffees/{id}/reveal", s.authed(s.revealCoffee))
 	m.HandleFunc("PUT /api/coffees/{id}/favorite", s.authed(s.favoriteCoffee))
 	m.HandleFunc("DELETE /api/coffees/{id}/favorite", s.authed(s.unfavoriteCoffee))
-	m.HandleFunc("GET /api/coffees/{id}/brews", s.authed(s.coffeeBrews))
+	m.HandleFunc("GET /api/coffees/{id}/brews", s.maybeAuthed(s.coffeeBrews))
 
 	// recipes
 	m.HandleFunc("GET /api/recipes", s.authed(s.listRecipes))
@@ -250,6 +265,13 @@ func (s *Server) authed(fn authedFunc) http.HandlerFunc {
 		if u == nil {
 			return errUnauthorized
 		}
+		return s.authedAs(w, r, u, fn)
+	})
+}
+
+// authedAs applies per-user limits and calls fn for a signed-in user.
+func (s *Server) authedAs(w http.ResponseWriter, r *http.Request, u *User, fn authedFunc) error {
+	{
 		key := strconv.FormatInt(u.ID, 10)
 		if ok, wait := s.guards.user.allow(key); !ok {
 			return tooMany(w, "You're going a bit fast.", wait)
@@ -261,7 +283,7 @@ func (s *Server) authed(fn authedFunc) http.HandlerFunc {
 		}
 		r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, u))
 		return fn(w, r, u)
-	})
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

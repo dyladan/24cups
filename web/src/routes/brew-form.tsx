@@ -65,7 +65,7 @@ function fromBrew(b: Brew): Draft {
 function BrewForm({ initial, brewId }: { initial: Draft; brewId?: number }) {
   const navigate = useNavigate()
   const { data: me } = useQuery(meQuery)
-  const { data: coffees } = useQuery(coffeesQuery)
+  const { data: coffees } = useQuery(coffeesQuery())
   const { data: recipes } = useQuery(recipesQuery)
   const { data: grinders } = useQuery(grindersQuery)
   const { data: catalog } = useQuery(catalogQuery)
@@ -224,7 +224,7 @@ function BrewForm({ initial, brewId }: { initial: Draft; brewId?: number }) {
             checked={d.isPublic}
             onChange={(isPublic) => set({ isPublic, excludeFromGlobal: isPublic ? false : d.excludeFromGlobal })}
             label="Public brew"
-            hint="Anyone who has opened this coffee can see the recipe and notes."
+            hint="Other members see it once they've rated (or revealed) this coffee. Signed-out visitors see it with spoilers on."
           />
           {!d.isPublic && (
             <Toggle
@@ -264,7 +264,7 @@ function BrewForm({ initial, brewId }: { initial: Draft; brewId?: number }) {
 
 export function NewBrewPage() {
   const { coffeeId } = newRoute.useSearch()
-  const { isPending } = useQuery(coffeesQuery)
+  const { isPending } = useQuery(coffeesQuery())
   if (isPending) return <Spinner />
   return (
     <>

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
 import { Eye, EyeOff, Heart, Star } from 'lucide-react'
 import { coffeesQuery, meQuery, type Coffee, type Stats } from '../api'
+import { useCoffeeView } from '../lib/anon'
 import { Blossom, ErrorText, PageHeader, Spinner, TastingNotes } from '../components/ui'
 import { formatRating } from '../lib/format'
 
@@ -12,11 +13,11 @@ export function todayDay(): number | null {
 }
 
 /** Shown instead of scores while a coffee is still blind for this user. */
-export function BlindRow({ stats, className }: { stats: Stats | null; className?: string }) {
+export function BlindRow({ stats, className, anon }: { stats: Stats | null; className?: string; anon?: boolean }) {
   return (
     <div className={clsx('flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3', className)}>
-      <span className="inline-flex items-center gap-1" title="Scores hidden until you rate it">
-        <EyeOff size={13} /> Rate to reveal
+      <span className="inline-flex items-center gap-1" title={anon ? 'Turn on spoilers to see ratings' : 'Scores hidden until you rate it'}>
+        <EyeOff size={13} /> {anon ? 'Ratings hidden' : 'Rate to reveal'}
       </span>
       {stats && (
         <span className="inline-flex items-center gap-1 tabular-nums" title="People who opened this door">
@@ -45,7 +46,7 @@ export function StatRow({ stats, className }: { stats: Stats; className?: string
   )
 }
 
-function Door({ c, today }: { c: Coffee; today: boolean }) {
+function Door({ c, today, anon }: { c: Coffee; today: boolean; anon: boolean }) {
   if (!c.opened) {
     return (
       <Link
@@ -66,7 +67,9 @@ function Door({ c, today }: { c: Coffee; today: boolean }) {
         {c.stats ? (
           <StatRow stats={c.stats} className="relative !text-door-ink [&_*]:!text-door-ink" />
         ) : (
-          <span className="relative text-[0.65rem] font-semibold uppercase tracking-[0.2em] opacity-70 transition group-hover:opacity-100">Open door →</span>
+          <span className="relative text-[0.65rem] font-semibold uppercase tracking-[0.2em] opacity-70 transition group-hover:opacity-100">
+            {anon ? `Opens Dec ${c.day}` : 'Open door →'}
+          </span>
         )}
       </Link>
     )
@@ -96,33 +99,53 @@ function Door({ c, today }: { c: Coffee; today: boolean }) {
       <div className="min-w-0">
         <p className="eyebrow mb-1 truncate">{info.origin}</p>
         <h3 className="display line-clamp-2 text-xl sm:text-2xl">{info.name}</h3>
-        {c.revealed && <TastingNotes notes={info.tastingNotes} className="mt-1.5 line-clamp-6 !text-[0.6rem] !tracking-[0.1em] leading-relaxed" />}
+        {(c.revealed || anon) && <TastingNotes notes={info.tastingNotes} className="mt-1.5 line-clamp-6 !text-[0.6rem] !tracking-[0.1em] leading-relaxed" />}
       </div>
-      {c.revealed ? c.stats && <StatRow stats={c.stats} /> : <BlindRow stats={c.stats} />}
+      {c.revealed ? c.stats && <StatRow stats={c.stats} /> : <BlindRow stats={c.stats} anon={anon} />}
     </Link>
   )
 }
 
 export function CalendarPage() {
-  const { data, isPending, error } = useQuery(coffeesQuery)
+  const { view, ready, anon } = useCoffeeView()
+  const { data, isPending, error } = useQuery({ ...coffeesQuery(view), enabled: ready })
   const { data: me } = useQuery(meQuery)
   const today = todayDay()
   if (isPending) return <Spinner />
   if (error) return <ErrorText error={error} />
   const opened = data.filter((c) => c.opened).length
+  const eyebrow = anon
+    ? opened === 0
+      ? 'Doors open December 1'
+      : opened >= data.length
+        ? `All ${data.length} doors open`
+        : `Day ${opened} of ${data.length}`
+    : `Hi ${me?.displayName ?? ''} · ${opened} of ${data.length} opened`
   return (
     <>
-      <PageHeader eyebrow={`Hi ${me?.displayName ?? ''} · ${opened} of ${data.length} opened`} title="Explore the lineup">
-        <Link to="/brews/new" className="btn btn-accent">
-          Log a brew
-        </Link>
+      <PageHeader eyebrow={eyebrow} title="Explore the lineup">
+        {anon ? (
+          <Link to="/register" className="btn btn-accent">
+            Join to log &amp; rate
+          </Link>
+        ) : (
+          <Link to="/brews/new" className="btn btn-accent">
+            Log a brew
+          </Link>
+        )}
       </PageHeader>
+      {anon && (
+        <p className="-mt-3 mb-6 max-w-2xl text-sm text-ink-2">
+          A community log for this year’s coffee advent calendar. Doors open day by day; community ratings stay hidden unless you
+          switch on <span className="font-semibold">Spoilers</span> at the top.
+        </p>
+      )}
       <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-paper-2">
         <div className="h-full rounded-full bg-gold transition-all" style={{ width: `${(opened / Math.max(1, data.length)) * 100}%` }} />
       </div>
       <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:auto-rows-auto lg:grid-cols-4">
         {data.map((c) => (
-          <Door key={c.id} c={c} today={today === c.day} />
+          <Door key={c.id} c={c} today={today === c.day} anon={anon} />
         ))}
       </div>
     </>

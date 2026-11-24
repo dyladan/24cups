@@ -30,8 +30,13 @@ type User struct {
 	// "rated" (after you rate a coffee or choose to reveal it), "opened",
 	// or "always" (scores even on unopened doors).
 	SpoilerMode string `json:"spoilerMode"`
-	TempUnit    string `json:"tempUnit"`
-	CreatedAt   string `json:"createdAt"`
+
+	// Set only for signed-out visitors (see anonViewer).
+	anon         bool
+	anonDay      int
+	anonSpoilers bool
+	TempUnit     string `json:"tempUnit"`
+	CreatedAt    string `json:"createdAt"`
 }
 
 var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)

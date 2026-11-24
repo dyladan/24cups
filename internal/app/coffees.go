@@ -166,12 +166,18 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 			return nil, err
 		}
 		c.Opened = c.OpenedAt != nil
+		if u.anon {
+			c.Opened, c.Favorited = c.Day <= u.anonDay, false
+		}
 		if myAvg != nil {
 			v := *myAvg / 2
 			c.MyAvg = &v
 		}
 		// myAvg is non-nil exactly when the user has a rated brew.
 		c.Revealed = u.isRevealed(c.Opened, myAvg != nil, manual)
+		if u.anon {
+			c.Revealed = c.Opened && u.anonSpoilers
+		}
 		st := stats[c.ID]
 		if st == nil {
 			st = &Stats{}
@@ -180,7 +186,11 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 		case c.Revealed:
 			c.Info, c.Stats = info, st
 		case c.Opened:
-			info.TastingNotes, info.Description = "", ""
+			// Signed-in tasters go in blind; for signed-out visitors only
+			// the ratings are spoilers.
+			if !u.anon {
+				info.TastingNotes, info.Description = "", ""
+			}
 			c.Info, c.Stats = info, &Stats{Opens: st.Opens}
 		case u.statsOnSealedDoors():
 			c.Stats = st
@@ -357,6 +367,22 @@ func (s *Server) coffeeBrews(w http.ResponseWriter, r *http.Request, u *User) er
 	id, err := pathID(r, "id")
 	if err != nil {
 		return err
+	}
+	if u.anon {
+		var day int
+		if err := s.rdb.QueryRowContext(r.Context(), `SELECT day FROM coffees WHERE id = ?`, id).Scan(&day); err != nil {
+			return err
+		}
+		if day > u.anonDay || !u.anonSpoilers {
+			writeJSON(w, 200, []*Brew{})
+			return nil
+		}
+		list, err := s.queryBrews(r.Context(), u, `b.coffee_id = ? AND b.is_public = 1`, 100, id)
+		if err != nil {
+			return err
+		}
+		writeJSON(w, 200, list)
+		return nil
 	}
 	if !s.hasOpened(r.Context(), u.ID, id) {
 		writeJSON(w, 200, []*Brew{})
