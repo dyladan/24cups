@@ -52,7 +52,7 @@ you can fix typos without touching the database:
    "tastingNotes": "…", "description": "…" }]
 ```
 
-The checked-in file has **placeholders**. Replace it with the real list.
+The checked-in file has the 2026 lineup, transcribed from the printed card. Days 5 (Framily) and 13 (Krampus) are blends; their origin is inferred from the listed region.
 
 ## Theming
 
