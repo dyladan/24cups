@@ -101,12 +101,43 @@ Go (net/http, SQLite via pure-Go `modernc.org/sqlite`, bcrypt sessions) serving
 a React + TypeScript SPA (Vite, TanStack Router, TanStack Query, Tailwind v4)
 embedded in a single static binary.
 
+## Deploying (Cloudflare Tunnel)
+
+`compose.yaml` runs the app plus `cloudflared`. The app publishes no ports
+and has no internet access. Only cloudflared reaches it, over a private
+Docker network, so it can trust Cloudflare's `CF-Connecting-IP` header for
+rate limiting.
+
+1. **Create a tunnel.** In the Cloudflare dashboard, go to Zero Trust → Networks →
+   Tunnels → Create a tunnel (Cloudflared). Copy the token from the install
+   command.
+2. **Route a hostname.** In the tunnel's *Public hostnames*, add e.g.
+   `advent.example.com` with service type **HTTP** and URL **`app:8080`**.
+3. **Configure and start:**
+   ```sh
+   cp .env.example .env   # paste the token; .env is git-ignored
+   docker compose up -d --build
+   docker compose ps      # app should be "healthy"
+   ```
+4. **Recommended Cloudflare settings** (SSL/TLS → Edge Certificates): Always
+   Use HTTPS on, minimum TLS 1.2, and HSTS once you've confirmed HTTPS works.
+
+**HTTPS:** visitors connect to Cloudflare's edge, which serves a free,
+auto-renewing certificate for your hostname. The hop from Cloudflare to
+cloudflared is an encrypted tunnel that cloudflared opens outbound. The only
+plain-HTTP hop is cloudflared → app, inside Docker's private network on the
+same machine. No origin certificate is needed.
+
+**Data** lives in the `advent-data` volume (`/data/advent.db`). Back it up
+with SQLite's online backup (e.g. `VACUUM INTO`), not by copying the file
+while the app is running.
+
 ## Running
 
 ```sh
 make build && ./advent-cup -db advent.db          # http://localhost:8080
 # or
-docker build -t advent-cup . && docker run -p 8080:8080 -v advent-data:/data advent-cup
+docker build -t advent-cup . && docker run -p 8080:8080 -v advent-data:/data advent-cup   # local only; see Deploying
 ```
 
 | Flag / env | Default | |

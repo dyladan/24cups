@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -30,7 +31,25 @@ func envInt(k string, def int) int {
 	return def
 }
 
+// healthcheck probes the running server; used by Docker, since the
+// distroless image has no shell or curl. Exit 0 = healthy.
+func healthcheck() {
+	addr := envOr("ADDR", ":8080")
+	if strings.HasPrefix(addr, ":") {
+		addr = "127.0.0.1" + addr
+	}
+	c := &http.Client{Timeout: 3 * time.Second}
+	res, err := c.Get("http://" + addr + "/api/health")
+	if err != nil || res.StatusCode != http.StatusOK {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
+		healthcheck()
+	}
 	addr := flag.String("addr", envOr("ADDR", ":8080"), "listen address")
 	dbPath := flag.String("db", envOr("DB_PATH", "advent.db"), "SQLite database path")
 	coffees := flag.String("coffees", envOr("COFFEES_FILE", ""), "JSON file of calendar coffees (defaults to the embedded list)")

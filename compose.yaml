@@ -1,0 +1,54 @@
+# Advent Cup behind a Cloudflare Tunnel.
+#
+#   cp .env.example .env    # then paste your tunnel token into .env
+#   docker compose up -d --build
+#
+# Visitors connect to Cloudflare over HTTPS (Cloudflare's edge certificate);
+# cloudflared carries traffic to the app over an outbound, encrypted tunnel.
+# The app has no published ports and no internet access.
+
+services:
+  app:
+    build: .
+    image: advent-cup:latest
+    restart: unless-stopped
+    environment:
+      # Real visitor IPs for rate limiting. Safe only because the app is
+      # reachable solely through cloudflared (no published ports).
+      CLIENT_IP_HEADER: CF-Connecting-IP
+      SECURE_COOKIES: "true"
+      CALENDAR_YEAR: ${CALENDAR_YEAR:-2026}
+    volumes:
+      - advent-data:/data
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp # SQLite temp space for large sorts
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+
+  cloudflared:
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-latest}
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      # Set in .env (never committed). See README → Deploying.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal # reaches the app as http://app:8080
+      - egress # outbound to Cloudflare
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+volumes:
+  advent-data:
+
+networks:
+  internal:
+    internal: true # no route to the internet
+  egress:
