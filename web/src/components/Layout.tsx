@@ -1,9 +1,10 @@
-import { Link, Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
+import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import clsx from 'clsx'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { CalendarDays, Coffee, Eye, EyeOff, LogOut, Trophy, User as UserIcon, Users } from 'lucide-react'
-import { api, meQuery } from '../api'
+import { meQuery } from '../api'
 import { useLiveUpdates } from '../lib/live'
+import { useLogout } from '../lib/logout'
 import { useAnonSpoilers } from '../lib/anon'
 
 const nav = [
@@ -61,15 +62,7 @@ function AnonNav() {
 export function Layout() {
   const { data: me } = useQuery(meQuery)
   useLiveUpdates(!!me)
-  const qc = useQueryClient()
-  const navigate = useNavigate()
-
-  async function logout() {
-    await api('/auth/logout', { method: 'POST' })
-    qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' })
-    qc.setQueryData(['me'], null)
-    navigate({ to: '/login' })
-  }
+  const logout = useLogout()
 
   return (
     <div className="flex min-h-dvh flex-col">

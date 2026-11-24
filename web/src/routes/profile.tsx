@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Plus, Trash2, X } from 'lucide-react'
+import { LogOut, Pencil, Plus, Trash2, X } from 'lucide-react'
 import {
   api,
   catalogQuery,
@@ -16,6 +16,7 @@ import {
 import { ErrorText, Field, PageHeader, RatioInput, Segmented, Spinner, SuggestInput, TempInput, TimeInput } from '../components/ui'
 import { formatRatio, formatTemp, formatTime } from '../lib/format'
 import { useThemePref, type ThemePref } from '../lib/theme'
+import { useLogout } from '../lib/logout'
 
 // ---------- settings ----------
 
@@ -23,6 +24,7 @@ function Settings({ me }: { me: User }) {
   const qc = useQueryClient()
   const [displayName, setDisplayName] = useState(me.displayName)
   const [theme, setTheme] = useThemePref()
+  const logout = useLogout()
   const update = useApiMutation((body: Partial<User>) => api<User>('/me', { method: 'PATCH', json: body }), [['coffees'], ['groups']])
   const patch = (body: Partial<User>) => update.mutate(body, { onSuccess: (u) => qc.setQueryData(['me'], u) })
 
@@ -117,6 +119,11 @@ function Settings({ me }: { me: User }) {
           </button>
         </form>
       </details>
+      <div className="border-t border-line pt-4">
+        <button type="button" className="btn btn-ghost w-full" onClick={() => logout()}>
+          <LogOut size={16} /> Sign out
+        </button>
+      </div>
     </section>
   )
 }
