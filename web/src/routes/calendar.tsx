@@ -36,7 +36,7 @@ function Door({ c, today }: { c: Coffee; today: boolean }) {
         to="/coffee/$coffeeId"
         params={{ coffeeId: c.id }}
         className={clsx(
-          'group relative flex aspect-[4/5] flex-col justify-between overflow-hidden rounded-2xl p-4 text-door-ink transition hover:-translate-y-0.5 hover:shadow-lg sm:aspect-square xl:aspect-[4/5]',
+          'group relative flex min-h-52 flex-col justify-between overflow-hidden rounded-2xl p-4 text-door-ink transition hover:-translate-y-0.5 hover:shadow-lg md:aspect-square',
           today ? 'bg-[#141110] ring-2 ring-door-ink/70' : 'bg-door',
         )}
       >
@@ -61,7 +61,7 @@ function Door({ c, today }: { c: Coffee; today: boolean }) {
       to="/coffee/$coffeeId"
       params={{ coffeeId: c.id }}
       className={clsx(
-        'card door-pop group relative flex aspect-[4/5] flex-col justify-between overflow-hidden p-4 transition hover:-translate-y-0.5 hover:border-gold hover:shadow-lg sm:aspect-square xl:aspect-[4/5]',
+        'card door-pop group relative flex min-h-52 flex-col justify-between p-4 transition hover:-translate-y-0.5 hover:border-gold hover:shadow-lg md:aspect-square',
         today && 'ring-2 ring-gold',
       )}
     >
@@ -80,7 +80,7 @@ function Door({ c, today }: { c: Coffee; today: boolean }) {
       <div className="min-w-0">
         <p className="eyebrow mb-1 truncate">{info.origin}</p>
         <h3 className="display line-clamp-2 text-xl sm:text-2xl">{info.name}</h3>
-        <TastingNotes notes={info.tastingNotes} className="mt-1.5 line-clamp-2 !text-[0.6rem] !tracking-[0.1em] leading-relaxed" />
+        <TastingNotes notes={info.tastingNotes} className="mt-1.5 line-clamp-6 !text-[0.6rem] !tracking-[0.1em] leading-relaxed" />
       </div>
       {c.stats && <StatRow stats={c.stats} />}
     </Link>
@@ -104,7 +104,7 @@ export function CalendarPage() {
       <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-paper-2">
         <div className="h-full rounded-full bg-gold transition-all" style={{ width: `${(opened / Math.max(1, data.length)) * 100}%` }} />
       </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-6">
+      <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 md:auto-rows-auto lg:grid-cols-4">
         {data.map((c) => (
           <Door key={c.id} c={c} today={today === c.day} />
         ))}
