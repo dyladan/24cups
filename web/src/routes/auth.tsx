@@ -107,8 +107,8 @@ export function RegisterPage() {
         <Field label="Username" hint="3–32 characters: letters, numbers, . _ -">
           <input className="input" autoComplete="username" autoCapitalize="none" value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} maxLength={32} pattern="[A-Za-z0-9_.\-]+" />
         </Field>
-        <Field label="Display name" hint="Shown to other people. Defaults to your username.">
-          <input className="input" autoComplete="nickname" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={50} />
+        <Field label="Display name (optional)" hint="What other people see. Leave blank to use your username; you can change it later in your profile.">
+          <input className="input" autoComplete="nickname" value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={50} placeholder={username.trim() || 'Same as your username'} />
         </Field>
         <Field label="Password" hint="At least 8 characters.">
           <input className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} maxLength={72} />
