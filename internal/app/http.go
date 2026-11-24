@@ -27,6 +27,7 @@ type Server struct {
 	ipHeader      string
 	calendarYear  int
 	now           func() time.Time
+	turnstile     *TurnstileConfig
 }
 
 // Options configures a Server.
@@ -43,9 +44,14 @@ type Options struct {
 	CalendarYear int
 	// Now overrides the clock (tests).
 	Now func() time.Time
+	// Turnstile protects sign-up when its Secret is set.
+	Turnstile TurnstileConfig
 }
 
 func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
+	if err := opts.Turnstile.Validate(); err != nil {
+		return nil, err
+	}
 	stats, err := loadStats(context.Background(), rdb)
 	if err != nil {
 		return nil, fmt.Errorf("load stats: %w", err)
@@ -54,7 +60,7 @@ func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
 		db: db, rdb: rdb, stats: stats, web: opts.Web, secureCookies: opts.SecureCookies,
 		mux: http.NewServeMux(), events: newBroker(opts.Limits),
 		guards: newGuards(opts.Limits), ipHeader: http.CanonicalHeaderKey(opts.ClientIPHeader),
-		calendarYear: opts.CalendarYear, now: opts.Now,
+		calendarYear: opts.CalendarYear, now: opts.Now, turnstile: &opts.Turnstile,
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -121,6 +127,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/me/password", s.authed(s.changePassword))
 
 	m.HandleFunc("GET /api/catalog", s.h(s.catalog))
+	m.HandleFunc("GET /api/config", s.h(s.publicConfig))
 	m.HandleFunc("GET /api/events", s.authed(s.streamEvents))
 
 	// coffees

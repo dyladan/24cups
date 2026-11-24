@@ -1,7 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
-import { useQueryClient } from '@tanstack/react-query'
-import { api, type User } from '../api'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { api, configQuery, type User } from '../api'
+import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
 import { Blossom, ErrorText, Field } from '../components/ui'
 
 const loginApi = getRouteApi('/login')
@@ -33,7 +34,7 @@ function useAuthSubmit(path: string, redirectTo?: string) {
   const navigate = useNavigate()
   const [error, setError] = useState<unknown>(null)
   const [pending, setPending] = useState(false)
-  async function submit(body: unknown) {
+  async function submit(body: unknown, after?: () => void) {
     setPending(true)
     setError(null)
     try {
@@ -49,6 +50,7 @@ function useAuthSubmit(path: string, redirectTo?: string) {
       setError(e)
     } finally {
       setPending(false)
+      after?.()
     }
   }
   return { submit, error, pending }
@@ -95,13 +97,18 @@ export function RegisterPage() {
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const { submit, error, pending } = useAuthSubmit('/auth/register', redirect)
+  const { data: config } = useQuery(configQuery)
+  const siteKey = config?.turnstileSiteKey
+  const [token, setToken] = useState<string | null>(null)
+  const turnstile = useRef<TurnstileHandle>(null)
   return (
     <AuthShell title="Create an account">
       <form
         className="space-y-4"
         onSubmit={(e: FormEvent) => {
           e.preventDefault()
-          submit({ username, displayName, password })
+          // Tokens are single-use: get a fresh one after every attempt.
+          submit({ username, displayName, password, turnstileToken: token ?? '' }, () => turnstile.current?.reset())
         }}
       >
         <Field label="Username" hint="3–32 characters: letters, numbers, . _ -">
@@ -113,8 +120,9 @@ export function RegisterPage() {
         <Field label="Password" hint="At least 8 characters.">
           <input className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} maxLength={72} />
         </Field>
+        {siteKey && <Turnstile ref={turnstile} siteKey={siteKey} action="signup" onToken={setToken} />}
         <ErrorText error={error} />
-        <button className="btn btn-primary w-full" disabled={pending}>
+        <button className="btn btn-primary w-full" disabled={pending || (!!siteKey && !token)}>
           {pending ? 'Creating…' : 'Create account'}
         </button>
         <p className="text-center text-sm text-ink-2">

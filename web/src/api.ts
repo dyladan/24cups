@@ -197,6 +197,13 @@ export const meQuery = queryOptions({
   staleTime: 5 * 60_000,
 })
 
+/** Public runtime config (e.g. the Turnstile site key, when enabled). */
+export const configQuery = queryOptions({
+  queryKey: ['config'],
+  queryFn: () => api<{ turnstileSiteKey?: string }>('/config'),
+  staleTime: 5 * 60_000,
+})
+
 export const catalogQuery = queryOptions({
   queryKey: ['catalog'],
   queryFn: () => api<Catalog>('/catalog'),

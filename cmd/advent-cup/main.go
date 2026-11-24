@@ -56,6 +56,8 @@ func main() {
 	secure := flag.Bool("secure-cookies", envOr("SECURE_COOKIES", "false") == "true", "mark session cookies Secure (set when served over HTTPS)")
 	ipHeader := flag.String("client-ip-header", envOr("CLIENT_IP_HEADER", ""), "trusted header with the real client IP, e.g. CF-Connecting-IP (only if the app is reachable solely through that proxy)")
 	calYear := flag.Int("calendar-year", envInt("CALENDAR_YEAR", 2026), "year of the December the calendar covers (unlocks doors for signed-out visitors)")
+	tsSiteKey := flag.String("turnstile-site-key", envOr("TURNSTILE_SITE_KEY", ""), "Cloudflare Turnstile site key (public)")
+	tsHosts := flag.String("turnstile-hostnames", envOr("TURNSTILE_HOSTNAMES", ""), "comma-separated hostnames Turnstile tokens must come from")
 	noLimits := flag.Bool("no-rate-limits", envOr("NO_RATE_LIMITS", "false") == "true", "disable rate limits (benchmarks only)")
 	flag.Parse()
 
@@ -89,11 +91,23 @@ func main() {
 		limits = app.Limits{}
 		slog.Warn("rate limits disabled")
 	}
+	if os.Getenv("TURNSTILE_SECRET") == "" {
+		slog.Warn("TURNSTILE_SECRET not set; sign-up has no bot check")
+	} else {
+		for _, h := range app.ParseHostnames(*tsHosts) {
+			if h == "localhost" || h == "127.0.0.1" {
+				slog.Warn("TURNSTILE_HOSTNAMES includes a local hostname; remove it in production", "hostname", h)
+			}
+		}
+	}
 	if *ipHeader == "" {
 		slog.Warn("no -client-ip-header set; behind a proxy or tunnel every client shares one rate-limit bucket")
 	}
 	handler, err := app.NewServer(db, rdb, app.Options{
 		Web: advent.WebFS(), SecureCookies: *secure, ClientIPHeader: *ipHeader, Limits: limits, CalendarYear: *calYear,
+		// The secret is read only from the environment so it never appears
+		// in process arguments.
+		Turnstile: app.TurnstileConfig{SiteKey: *tsSiteKey, Secret: os.Getenv("TURNSTILE_SECRET"), Hostnames: app.ParseHostnames(*tsHosts)},
 	})
 	if err != nil {
 		slog.Error("start", "err", err)

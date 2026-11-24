@@ -60,7 +60,7 @@ Suggested Cloudflare settings (dashboard, free plan):
 - Keep DDoS protection on (automatic) and use "Under Attack" mode only during an active attack.
 - Add a WAF rate-limiting rule for paths starting with `/api/auth/` as an outer layer.
 - Bot Fight Mode can challenge real browsers' API and live-update requests. Test before relying on it.
-- Optional: Turnstile on sign-up to stop scripted account creation (not implemented yet).
+- Turnstile protects sign-up (see Deploying).
 
 ## Live updates
 
@@ -119,7 +119,14 @@ rate limiting.
    docker compose up -d --build
    docker compose ps      # app should be "healthy"
    ```
-4. **Recommended Cloudflare settings** (SSL/TLS → Edge Certificates): Always
+4. **Turnstile (bot check on sign-up):** set `TURNSTILE_SECRET` and
+   `TURNSTILE_HOSTNAMES` in `.env`. The hostnames must match the widget's
+   domains in the Turnstile dashboard. The site key is public and set in
+   `compose.yaml`. Each sign-up token is verified server-side with Cloudflare
+   Siteverify: it must pass, be for action `signup`, come from an allowed
+   hostname, and not be reused. Any failure or timeout rejects the sign-up.
+   Without a secret, sign-up has no bot check (fine for local development).
+5. **Recommended Cloudflare settings** (SSL/TLS → Edge Certificates): Always
    Use HTTPS on, minimum TLS 1.2, and HSTS once you've confirmed HTTPS works.
 
 **HTTPS:** visitors connect to Cloudflare's edge, which serves a free,
@@ -148,6 +155,9 @@ docker build -t advent-cup . && docker run -p 8080:8080 -v advent-data:/data adv
 | `-secure-cookies` / `SECURE_COOKIES=true` | false | set when served over HTTPS |
 | `-client-ip-header` / `CLIENT_IP_HEADER` | none | trusted real-IP header, e.g. `CF-Connecting-IP` |
 | `-calendar-year` / `CALENDAR_YEAR` | 2026 | the December the calendar covers |
+| `TURNSTILE_SECRET` (env only) | none | enables the Turnstile check on sign-up |
+| `-turnstile-site-key` / `TURNSTILE_SITE_KEY` | none | public widget key |
+| `-turnstile-hostnames` / `TURNSTILE_HOSTNAMES` | none | comma-separated allowed hostnames (required with a secret) |
 | `-no-rate-limits` / `NO_RATE_LIMITS=true` | false | benchmarks only |
 
 ## Calendar contents

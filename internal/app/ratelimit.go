@@ -274,6 +274,21 @@ func humanWait(secs int) string {
 // operator; otherwise anyone could spoof it. IPv6 is grouped by /64 because
 // one host can trivially rotate through its whole prefix.
 func (s *Server) clientIP(r *http.Request) string {
+	raw := s.rawClientIP(r)
+	addr, err := netip.ParseAddr(raw)
+	if err != nil {
+		return raw
+	}
+	addr = addr.Unmap()
+	if addr.Is6() {
+		p, _ := addr.Prefix(64)
+		return p.String()
+	}
+	return addr.String()
+}
+
+// rawClientIP is the caller's exact address (trusted header or RemoteAddr).
+func (s *Server) rawClientIP(r *http.Request) string {
 	raw := ""
 	if s.ipHeader != "" {
 		raw = strings.TrimSpace(strings.Split(r.Header.Get(s.ipHeader), ",")[0])
@@ -285,14 +300,5 @@ func (s *Server) clientIP(r *http.Request) string {
 		}
 		raw = host
 	}
-	addr, err := netip.ParseAddr(raw)
-	if err != nil {
-		return raw
-	}
-	addr = addr.Unmap()
-	if addr.Is6() {
-		p, _ := addr.Prefix(64)
-		return p.String()
-	}
-	return addr.String()
+	return raw
 }

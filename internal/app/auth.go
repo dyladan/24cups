@@ -100,9 +100,10 @@ func (s *Server) startSession(w http.ResponseWriter, r *http.Request, userID int
 }
 
 type credentials struct {
-	Username    string `json:"username"`
-	Password    string `json:"password"`
-	DisplayName string `json:"displayName"`
+	Username       string `json:"username"`
+	Password       string `json:"password"`
+	DisplayName    string `json:"displayName"`
+	TurnstileToken string `json:"turnstileToken"`
 }
 
 func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
@@ -126,6 +127,11 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
 	}
 	if display == "" {
 		display = in.Username
+	}
+	if s.turnstile.enabled() {
+		if err := s.verifyTurnstile(r, in.TurnstileToken, "signup"); err != nil {
+			return err
+		}
 	}
 	var hash []byte
 	if err := s.guards.withPasswordCheck(r.Context(), func() {
