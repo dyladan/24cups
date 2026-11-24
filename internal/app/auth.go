@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -96,6 +97,9 @@ type credentials struct {
 }
 
 func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
+	if ok, wait := s.guards.signup.allow(s.clientIP(r)); !ok {
+		return tooMany(w, "Too many new accounts from your network.", wait)
+	}
 	var in credentials
 	if err := readJSON(w, r, &in); err != nil {
 		return err
@@ -114,7 +118,12 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
 	if display == "" {
 		display = in.Username
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+	var hash []byte
+	if err := s.guards.withPasswordCheck(r.Context(), func() {
+		hash, err = bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
+	}); err != nil {
+		return err
+	}
 	if err != nil {
 		return err
 	}
@@ -135,21 +144,38 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
+	if ok, wait := s.guards.login.allow(s.clientIP(r)); !ok {
+		return tooMany(w, "Too many sign-in attempts from your network.", wait)
+	}
 	var in credentials
 	if err := readJSON(w, r, &in); err != nil {
 		return err
 	}
+	name := strings.ToLower(strings.TrimSpace(in.Username))
+	if blocked, wait := s.guards.loginFails.blocked(name); blocked {
+		return tooMany(w, "Too many failed sign-ins for this account.", wait)
+	}
 	var id int64
 	var hash string
 	err := s.rdb.QueryRowContext(r.Context(),
-		`SELECT id, password_hash FROM users WHERE username = ?`, strings.TrimSpace(in.Username)).Scan(&id, &hash)
+		`SELECT id, password_hash FROM users WHERE username = ?`, name).Scan(&id, &hash)
 	if errors.Is(err, sql.ErrNoRows) {
-		bcrypt.CompareHashAndPassword(dummyHash, []byte(in.Password))
-		return errf(401, "wrong username or password")
+		// Same work and delay as a wrong password, so timing doesn't reveal
+		// which usernames exist.
+		hash = string(dummyHash)
+		id = 0
 	} else if err != nil {
 		return err
 	}
-	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Password)) != nil {
+	var match bool
+	if err := s.guards.withPasswordCheck(r.Context(), func() {
+		match = bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Password)) == nil
+	}); err != nil {
+		return err
+	}
+	if !match || id == 0 {
+		s.guards.loginFails.spend(name)
+		s.guards.failDelay(r.Context())
 		return errf(401, "wrong username or password")
 	}
 	if err := s.startSession(w, r, id); err != nil {
@@ -235,14 +261,29 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request, u *User)
 	if len(in.New) < 8 || len(in.New) > 72 {
 		return errf(400, "password must be 8–72 characters")
 	}
+	key := strconv.FormatInt(u.ID, 10)
+	if blocked, wait := s.guards.pwFails.blocked(key); blocked {
+		return tooMany(w, "Too many wrong passwords.", wait)
+	}
 	var hash string
 	if err := s.rdb.QueryRowContext(r.Context(), `SELECT password_hash FROM users WHERE id = ?`, u.ID).Scan(&hash); err != nil {
 		return err
 	}
-	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Current)) != nil {
+	var match bool
+	var nh []byte
+	var err error
+	if err := s.guards.withPasswordCheck(r.Context(), func() {
+		if match = bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Current)) == nil; match {
+			nh, err = bcrypt.GenerateFromPassword([]byte(in.New), bcrypt.DefaultCost)
+		}
+	}); err != nil {
+		return err
+	}
+	if !match {
+		s.guards.pwFails.spend(key)
+		s.guards.failDelay(r.Context())
 		return errf(400, "current password is wrong")
 	}
-	nh, err := bcrypt.GenerateFromPassword([]byte(in.New), bcrypt.DefaultCost)
 	if err != nil {
 		return err
 	}

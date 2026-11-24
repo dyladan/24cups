@@ -20,6 +20,37 @@ Lab or Fellow**.
 Global averages are computed **per user first** (each user's included brews are
 averaged), then averaged across users, so one prolific brewer can't skew a coffee.
 
+## Abuse protection
+
+Built in (defaults in `DefaultLimits`, `internal/app/ratelimit.go`):
+
+| What | Limit |
+|---|---|
+| All API requests | 30/s per IP (burst 150), 15/s per signed-in user (burst 75) |
+| Changes (brews, groups, …) | 1/s per user (burst 20) |
+| Sign-up | 5 per hour per IP |
+| Sign-in | 10/min per IP; 10 failures per 15 min per username, from any IP |
+| Failed sign-in | ~1 s delay; unknown usernames take the same time |
+| Password hashing | at most 3 at once, then "busy" (bcrypt is the costliest thing an anonymous client can trigger) |
+| Live-update streams | 10 per user, 40 per IP |
+| Content per user | 30 brews per coffee, 50 presets, 20 grinders, 10 owned groups |
+| Requests | 64 KB bodies, 32 KB headers |
+
+Limited requests get HTTP 429 with `Retry-After` and a readable message.
+
+**Behind a proxy or tunnel, set `CLIENT_IP_HEADER=CF-Connecting-IP`.**
+Otherwise every visitor appears to come from the proxy and shares one
+bucket. Only set it if the app's port isn't reachable except through
+Cloudflare: anyone who can reach the port directly could fake the header. In
+Docker, don't publish the port; attach the container to the proxy network
+only. IPv6 clients are grouped by /64.
+
+Suggested Cloudflare settings (dashboard, free plan):
+- Keep DDoS protection on (automatic) and use "Under Attack" mode only during an active attack.
+- Add a WAF rate-limiting rule for paths starting with `/api/auth/` as an outer layer.
+- Bot Fight Mode can challenge real browsers' API and live-update requests. Test before relying on it.
+- Optional: Turnstile on sign-up to stop scripted account creation (not implemented yet).
+
 ## Live updates
 
 Pages update in near real time over Server-Sent Events (`GET /api/events`).
@@ -43,6 +74,7 @@ after each write by re-reading only the affected user/coffee pair, so page
 views never scan the brews table. Reads use a pool of read-only SQLite
 connections; writes go through a single connection.
 
+Benchmarks run with `-no-rate-limits` (one load generator = one IP).
 Measured on a Raspberry Pi 5 (4 GB) with Dec-24-sized data, with the load
 generator on the same Pi limited to 1–2 cores:
 
@@ -72,6 +104,8 @@ docker build -t advent-cup . && docker run -p 8080:8080 -v advent-data:/data adv
 | `-db` / `DB_PATH` | `advent.db` | SQLite file |
 | `-coffees` / `COFFEES_FILE` | embedded `data/coffees.json` | calendar contents |
 | `-secure-cookies` / `SECURE_COOKIES=true` | false | set when served over HTTPS |
+| `-client-ip-header` / `CLIENT_IP_HEADER` | none | trusted real-IP header, e.g. `CF-Connecting-IP` |
+| `-no-rate-limits` / `NO_RATE_LIMITS=true` | false | benchmarks only |
 
 ## Calendar contents
 

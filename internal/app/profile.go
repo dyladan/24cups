@@ -95,6 +95,9 @@ func (s *Server) createRecipe(w http.ResponseWriter, r *http.Request, u *User) e
 	if err != nil {
 		return err
 	}
+	if err := s.capCheck(r, `SELECT COUNT(*) FROM recipes WHERE user_id = ?`, s.guards.cfg.MaxRecipes, "You can save up to %d recipe presets.", u.ID); err != nil {
+		return err
+	}
 	res, err := s.db.ExecContext(r.Context(), `
 		INSERT INTO recipes(user_id, name, method, dose_g, ratio, temp_c, target_time_s, notes, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -243,6 +246,9 @@ func (s *Server) readGrinder(w http.ResponseWriter, r *http.Request) (*Grinder, 
 func (s *Server) createGrinder(w http.ResponseWriter, r *http.Request, u *User) error {
 	in, burrs, err := s.readGrinder(w, r)
 	if err != nil {
+		return err
+	}
+	if err := s.capCheck(r, `SELECT COUNT(*) FROM grinders WHERE user_id = ?`, s.guards.cfg.MaxGrinders, "You can add up to %d grinders.", u.ID); err != nil {
 		return err
 	}
 	res, err := s.db.ExecContext(r.Context(),

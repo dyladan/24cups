@@ -36,37 +36,66 @@ type event struct {
 
 type subscriber struct {
 	userID int64
+	ip     string
 	client string
 	ch     chan []byte
 }
 
 type broker struct {
-	mu     sync.Mutex
-	subs   map[*subscriber]struct{}
-	closed bool
+	mu      sync.Mutex
+	subs    map[*subscriber]struct{}
+	closed  bool
+	perUser map[int64]int
+	perIP   map[string]int
+	maxUser int
+	maxIP   int
 }
 
-func newBroker() *broker { return &broker{subs: map[*subscriber]struct{}{}} }
+func newBroker(l Limits) *broker {
+	return &broker{
+		subs: map[*subscriber]struct{}{}, perUser: map[int64]int{}, perIP: map[string]int{},
+		maxUser: l.StreamsPerUser, maxIP: l.StreamsPerIP,
+	}
+}
 
-func (b *broker) subscribe(userID int64, client string) *subscriber {
-	sub := &subscriber{userID: userID, client: client, ch: make(chan []byte, 32)}
+// subscribe registers a stream, or returns nil if the user or IP already
+// has too many open (each one holds a connection and some memory).
+func (b *broker) subscribe(userID int64, ip, client string) *subscriber {
+	sub := &subscriber{userID: userID, ip: ip, client: client, ch: make(chan []byte, 32)}
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if (b.maxUser > 0 && b.perUser[userID] >= b.maxUser) || (b.maxIP > 0 && b.perIP[ip] >= b.maxIP) {
+		return nil
+	}
 	if b.closed {
 		close(sub.ch)
 		return sub
 	}
 	b.subs[sub] = struct{}{}
+	b.perUser[userID]++
+	b.perIP[ip]++
 	return sub
+}
+
+// removeLocked drops sub and its counts; callers hold b.mu.
+func (b *broker) removeLocked(sub *subscriber) {
+	if _, ok := b.subs[sub]; !ok {
+		return
+	}
+	delete(b.subs, sub)
+	close(sub.ch)
+	if b.perUser[sub.userID]--; b.perUser[sub.userID] <= 0 {
+		delete(b.perUser, sub.userID)
+	}
+	if b.perIP[sub.ip]--; b.perIP[sub.ip] <= 0 {
+		delete(b.perIP, sub.ip)
+	}
 }
 
 func (b *broker) unsubscribe(sub *subscriber) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if _, ok := b.subs[sub]; ok {
-		delete(b.subs, sub)
-		close(sub.ch)
-	}
+	b.removeLocked(sub)
 }
 
 func (b *broker) publish(ev event) {
@@ -85,8 +114,7 @@ func (b *broker) publish(ev event) {
 		default:
 			// Slow consumer: drop it. The browser reconnects and refetches
 			// everything, so nothing is lost.
-			delete(b.subs, sub)
-			close(sub.ch)
+			b.removeLocked(sub)
 		}
 	}
 }
@@ -98,8 +126,7 @@ func (b *broker) closeAll() {
 	defer b.mu.Unlock()
 	b.closed = true
 	for sub := range b.subs {
-		delete(b.subs, sub)
-		close(sub.ch)
+		b.removeLocked(sub)
 	}
 }
 
@@ -133,6 +160,15 @@ const (
 )
 
 func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, u *User) error {
+	client := r.URL.Query().Get("client")
+	if len(client) > 64 {
+		client = ""
+	}
+	sub := s.events.subscribe(u.ID, s.clientIP(r), client)
+	if sub == nil {
+		return tooMany(w, "Too many open live-update connections.", 30*time.Second)
+	}
+	defer s.events.unsubscribe(sub)
 	rc := http.NewResponseController(w)
 	// The server's WriteTimeout would otherwise cut the stream after 30s.
 	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
@@ -140,12 +176,6 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, u *User) e
 	}
 	// Likewise ReadTimeout: when it expires the request context is canceled.
 	rc.SetReadDeadline(time.Time{})
-	client := r.URL.Query().Get("client")
-	if len(client) > 64 {
-		client = ""
-	}
-	sub := s.events.subscribe(u.ID, client)
-	defer s.events.unsubscribe(sub)
 
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")

@@ -186,6 +186,9 @@ func (s *Server) createBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	if err != nil {
 		return err
 	}
+	if err := s.capCheck(r, `SELECT COUNT(*) FROM brews WHERE user_id = ? AND coffee_id = ?`, s.guards.cfg.MaxBrewsPerCoffee, "You can log up to %d brews per coffee.", u.ID, in.CoffeeID); err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		return err
@@ -229,6 +232,11 @@ func (s *Server) updateBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	var oldCoffee int64
 	if err := s.rdb.QueryRowContext(r.Context(), `SELECT coffee_id FROM brews WHERE id = ? AND user_id = ?`, id, u.ID).Scan(&oldCoffee); err != nil {
 		return err
+	}
+	if oldCoffee != in.CoffeeID {
+		if err := s.capCheck(r, `SELECT COUNT(*) FROM brews WHERE user_id = ? AND coffee_id = ?`, s.guards.cfg.MaxBrewsPerCoffee, "You can log up to %d brews per coffee.", u.ID, in.CoffeeID); err != nil {
+			return err
+		}
 	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {

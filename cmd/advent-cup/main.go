@@ -27,6 +27,8 @@ func main() {
 	dbPath := flag.String("db", envOr("DB_PATH", "advent.db"), "SQLite database path")
 	coffees := flag.String("coffees", envOr("COFFEES_FILE", ""), "JSON file of calendar coffees (defaults to the embedded list)")
 	secure := flag.Bool("secure-cookies", envOr("SECURE_COOKIES", "false") == "true", "mark session cookies Secure (set when served over HTTPS)")
+	ipHeader := flag.String("client-ip-header", envOr("CLIENT_IP_HEADER", ""), "trusted header with the real client IP, e.g. CF-Connecting-IP (only if the app is reachable solely through that proxy)")
+	noLimits := flag.Bool("no-rate-limits", envOr("NO_RATE_LIMITS", "false") == "true", "disable rate limits (benchmarks only)")
 	flag.Parse()
 
 	db, err := app.OpenDB(*dbPath)
@@ -54,7 +56,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler, err := app.NewServer(db, rdb, advent.WebFS(), *secure)
+	limits := app.DefaultLimits()
+	if *noLimits {
+		limits = app.Limits{}
+		slog.Warn("rate limits disabled")
+	}
+	if *ipHeader == "" {
+		slog.Warn("no -client-ip-header set; behind a proxy or tunnel every client shares one rate-limit bucket")
+	}
+	handler, err := app.NewServer(db, rdb, app.Options{
+		Web: advent.WebFS(), SecureCookies: *secure, ClientIPHeader: *ipHeader, Limits: limits,
+	})
 	if err != nil {
 		slog.Error("start", "err", err)
 		os.Exit(1)
@@ -66,10 +78,12 @@ func main() {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    32 << 10,
 	}
 	srv.RegisterOnShutdown(handler.CloseStreams)
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	go handler.Run(ctx)
 	go func() {
 		slog.Info("listening", "addr", *addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

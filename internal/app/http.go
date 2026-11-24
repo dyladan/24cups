@@ -22,17 +22,37 @@ type Server struct {
 	secureCookies bool
 	mux           *http.ServeMux
 	events        *broker
+	guards        *guards
+	ipHeader      string
 }
 
-func NewServer(db, rdb *sql.DB, web fs.FS, secureCookies bool) (*Server, error) {
+// Options configures a Server.
+type Options struct {
+	Web           fs.FS
+	SecureCookies bool
+	// ClientIPHeader names a header carrying the real client IP, set by a
+	// trusted proxy (e.g. "CF-Connecting-IP" behind a Cloudflare Tunnel).
+	// Leave empty unless the app is only reachable through that proxy.
+	ClientIPHeader string
+	Limits         Limits
+}
+
+func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
 	stats, err := loadStats(context.Background(), rdb)
 	if err != nil {
 		return nil, fmt.Errorf("load stats: %w", err)
 	}
-	s := &Server{db: db, rdb: rdb, stats: stats, web: web, secureCookies: secureCookies, mux: http.NewServeMux(), events: newBroker()}
+	s := &Server{
+		db: db, rdb: rdb, stats: stats, web: opts.Web, secureCookies: opts.SecureCookies,
+		mux: http.NewServeMux(), events: newBroker(opts.Limits),
+		guards: newGuards(opts.Limits), ipHeader: http.CanonicalHeaderKey(opts.ClientIPHeader),
+	}
 	s.routes()
 	return s, nil
 }
+
+// Run starts background housekeeping until ctx is done.
+func (s *Server) Run(ctx context.Context) { s.guards.janitor(ctx) }
 
 // refreshStats updates the in-memory aggregates after a write. Failures are
 // logged rather than surfaced: the write itself succeeded.
@@ -48,6 +68,14 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "same-origin")
 	w.Header().Set("X-Frame-Options", "DENY")
+	if strings.HasPrefix(r.URL.Path, "/api/") {
+		if ok, wait := s.guards.ip.allow(s.clientIP(r)); !ok {
+			s.h(func(w http.ResponseWriter, r *http.Request) error {
+				return tooMany(w, "Too many requests from your network.", wait)
+			})(w, r)
+			return
+		}
+	}
 	if strings.HasPrefix(r.URL.Path, "/api/") && !isSafeMethod(r.Method) {
 		// Cross-site requests cannot set custom headers without a CORS
 		// preflight (which we never approve), so this blocks CSRF.
@@ -155,6 +183,21 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 	http.ServeFileFS(w, r, s.web, "index.html")
 }
 
+// capCheck rejects a create when the user already has max rows (0 = no cap).
+func (s *Server) capCheck(r *http.Request, countSQL string, max int, msg string, args ...any) error {
+	if max <= 0 {
+		return nil
+	}
+	var n int
+	if err := s.rdb.QueryRowContext(r.Context(), countSQL, args...).Scan(&n); err != nil {
+		return err
+	}
+	if n >= max {
+		return errf(http.StatusConflict, msg, max)
+	}
+	return nil
+}
+
 // ---- handler plumbing ----
 
 type apiError struct {
@@ -206,6 +249,15 @@ func (s *Server) authed(fn authedFunc) http.HandlerFunc {
 		if u == nil {
 			return errUnauthorized
 		}
+		key := strconv.FormatInt(u.ID, 10)
+		if ok, wait := s.guards.user.allow(key); !ok {
+			return tooMany(w, "You're going a bit fast.", wait)
+		}
+		if !isSafeMethod(r.Method) {
+			if ok, wait := s.guards.write.allow(key); !ok {
+				return tooMany(w, "You're making changes too quickly.", wait)
+			}
+		}
 		r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, u))
 		return fn(w, r, u)
 	})
@@ -220,7 +272,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 }
 
 func readJSON(w http.ResponseWriter, r *http.Request, v any) error {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
 		return errf(http.StatusBadRequest, "invalid JSON body: %v", err)
 	}

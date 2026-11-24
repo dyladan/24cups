@@ -148,6 +148,9 @@ func (s *Server) createGroup(w http.ResponseWriter, r *http.Request, u *User) er
 	if err := in.validate(); err != nil {
 		return err
 	}
+	if err := s.capCheck(r, `SELECT COUNT(*) FROM groups WHERE owner_id = ?`, s.guards.cfg.MaxOwnedGroups, "You can own up to %d groups.", u.ID); err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		return err

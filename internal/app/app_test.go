@@ -37,7 +37,15 @@ func (c *client) do(method, path, body string, out any) int {
 	return res.StatusCode
 }
 
+// testLimits keeps account protections but no general throttling, so tests
+// that hammer the API from one IP aren't rate limited.
+var testLimits = Limits{PasswordChecks: 3}
+
 func setup(t *testing.T) *httptest.Server {
+	return setupWith(t, testLimits)
+}
+
+func setupWith(t *testing.T, limits Limits) *httptest.Server {
 	dbPath := filepath.Join(t.TempDir(), "t.db")
 	db, err := OpenDB(dbPath)
 	if err != nil {
@@ -52,7 +60,7 @@ func setup(t *testing.T) *httptest.Server {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { rdb.Close() })
-	h, err := NewServer(db, rdb, nil, false)
+	h, err := NewServer(db, rdb, Options{Limits: limits, ClientIPHeader: "X-Test-IP"})
 	if err != nil {
 		t.Fatal(err)
 	}
