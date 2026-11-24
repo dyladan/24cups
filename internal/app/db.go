@@ -3,6 +3,7 @@ package app
 import (
 	"database/sql"
 	"fmt"
+	"runtime"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -21,6 +22,20 @@ func OpenDB(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	return db, nil
+}
+
+// OpenReadDB opens a pool of read-only connections. With WAL, readers run
+// in parallel with each other and with the single writer from OpenDB.
+func OpenReadDB(path string) (*sql.DB, error) {
+	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=query_only(1)", path)
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, err
+	}
+	n := runtime.NumCPU() * 2
+	db.SetMaxOpenConns(n)
+	db.SetMaxIdleConns(n)
 	return db, nil
 }
 
@@ -143,6 +158,11 @@ CREATE TABLE group_members (
 	PRIMARY KEY (group_id, user_id)
 );
 CREATE INDEX group_members_user ON group_members(user_id);
+`,
+	// v2: indexes for per-user lookups and the coffee brew feed
+	`
+CREATE INDEX brews_user_coffee ON brews(user_id, coffee_id);
+CREATE INDEX brews_coffee_brewed ON brews(coffee_id, brewed_at);
 `,
 }
 

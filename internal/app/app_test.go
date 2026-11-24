@@ -38,7 +38,8 @@ func (c *client) do(method, path, body string, out any) int {
 }
 
 func setup(t *testing.T) *httptest.Server {
-	db, err := OpenDB(filepath.Join(t.TempDir(), "t.db"))
+	dbPath := filepath.Join(t.TempDir(), "t.db")
+	db, err := OpenDB(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,16 @@ func setup(t *testing.T) *httptest.Server {
 	if err := SeedCoffees(db, []byte(`[{"day":1,"name":"One"},{"day":2,"name":"Two"}]`)); err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(NewServer(db, nil, false))
+	rdb, err := OpenReadDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { rdb.Close() })
+	h, err := NewServer(db, rdb, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return srv
 }

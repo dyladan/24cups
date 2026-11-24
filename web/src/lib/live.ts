@@ -28,8 +28,10 @@ export function useLiveUpdates(enabled: boolean) {
       } catch {
         return
       }
-      // Coalesce bursts (e.g. several people brewing at once) into one refetch.
-      timer ??= setTimeout(flush, 250)
+      // Coalesce bursts into one refetch, with jitter so every open page
+      // doesn't hit the server in the same instant (the server sends each
+      // batch to all streams at once).
+      timer ??= setTimeout(flush, 250 + Math.random() * 1500)
     })
 
     es.addEventListener('open', () => {

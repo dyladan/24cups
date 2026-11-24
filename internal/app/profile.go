@@ -51,7 +51,7 @@ type Recipe struct {
 }
 
 func (s *Server) listRecipes(w http.ResponseWriter, r *http.Request, u *User) error {
-	rows, err := s.db.QueryContext(r.Context(),
+	rows, err := s.rdb.QueryContext(r.Context(),
 		`SELECT id, name, method, dose_g, ratio, temp_c, target_time_s, notes FROM recipes WHERE user_id = ? ORDER BY name COLLATE NOCASE`, u.ID)
 	if err != nil {
 		return err
@@ -165,7 +165,7 @@ func (g *Grinder) Label() string {
 func (s *Server) getGrinder(r *http.Request, userID, id int64) (*Grinder, error) {
 	g := &Grinder{}
 	var burrs string
-	err := s.db.QueryRowContext(r.Context(),
+	err := s.rdb.QueryRowContext(r.Context(),
 		`SELECT id, model, nickname, burrsets, notes FROM grinders WHERE id = ? AND user_id = ?`, id, userID,
 	).Scan(&g.ID, &g.Model, &g.Nickname, &burrs, &g.Notes)
 	if err != nil {
@@ -179,7 +179,7 @@ func (s *Server) getGrinder(r *http.Request, userID, id int64) (*Grinder, error)
 }
 
 func (s *Server) listGrinders(w http.ResponseWriter, r *http.Request, u *User) error {
-	rows, err := s.db.QueryContext(r.Context(),
+	rows, err := s.rdb.QueryContext(r.Context(),
 		`SELECT id, model, nickname, burrsets, notes FROM grinders WHERE user_id = ? ORDER BY id`, u.ID)
 	if err != nil {
 		return err

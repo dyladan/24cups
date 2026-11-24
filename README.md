@@ -35,6 +35,23 @@ Caddy and Cloudflare Tunnel work as is; nginx honors the `X-Accel-Buffering: no`
 header the server sends. Over plain HTTP/1.1, browsers allow about 6
 connections per site, so serve over HTTPS (HTTP/2) if people keep many tabs open.
 
+## Performance
+
+Community stats (averages, opens, favorites, rating distributions, group
+leaderboards) are kept in memory. They're loaded at startup and updated
+after each write by re-reading only the affected user/coffee pair, so page
+views never scan the brews table. Reads use a pool of read-only SQLite
+connections; writes go through a single connection.
+
+Measured on a Raspberry Pi 5 (4 GB) with Dec-24-sized data, with the load
+generator on the same Pi limited to 1–2 cores:
+
+| Scenario | Result |
+|---|---|
+| Mixed API traffic, 500 / 2,000 / 5,000 users | ~2,900 / 2,850 / 2,700 req/s, p95 ≈ 11 ms, no errors |
+| 2,000 open pages + 2 brews/s (live-update refetch storm) | ~2,000 refetches/s, p95 2.7 ms, p99 9.5 ms, ≤ 1.2 cores |
+| Memory | ~80 MB at 5,000 users; ~310 MB with 2,000 open live streams |
+
 ## Stack
 
 Go (net/http, SQLite via pure-Go `modernc.org/sqlite`, bcrypt sessions) serving

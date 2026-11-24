@@ -98,75 +98,26 @@ func SeedCoffees(db *sql.DB, data []byte) error {
 // public brews, plus private brews the owner didn't exclude.
 const includedRatings = `rating IS NOT NULL AND (is_public = 1 OR exclude_from_global = 0)`
 
-// computeStats returns stats per coffee id. If memberOf > 0 only members of
-// that group are counted.
+// computeStats returns stats per coffee id from the in-memory store. If
+// memberOf > 0 only members of that group are counted.
 func (s *Server) computeStats(ctx context.Context, coffeeID, memberOf int64) (map[int64]*Stats, error) {
-	out := map[int64]*Stats{}
-	get := func(id int64) *Stats {
-		st, ok := out[id]
-		if !ok {
-			st = &Stats{}
-			out[id] = st
-		}
-		return st
+	if memberOf <= 0 {
+		return s.stats.all(), nil
 	}
-	userFilter, args := "", []any{}
-	if memberOf > 0 {
-		userFilter = ` AND user_id IN (SELECT user_id FROM group_members WHERE group_id = ?)`
-		args = append(args, memberOf)
-	}
-	coffeeFilter := ""
-	if coffeeID > 0 {
-		coffeeFilter = ` AND coffee_id = ?`
-		args = append(args, coffeeID)
-	}
-
-	rows, err := s.db.QueryContext(ctx, `
-		WITH per_user AS (
-			SELECT coffee_id, user_id, AVG(rating) AS r, COUNT(*) AS n FROM brews
-			WHERE `+includedRatings+userFilter+coffeeFilter+`
-			GROUP BY coffee_id, user_id)
-		SELECT coffee_id, AVG(r), COUNT(*), SUM(n) FROM per_user GROUP BY coffee_id`, args...)
+	rows, err := s.rdb.QueryContext(ctx, `SELECT user_id FROM group_members WHERE group_id = ?`, memberOf)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+	var users []int64
 	for rows.Next() {
 		var id int64
-		var avg float64
-		st := &Stats{}
-		if err := rows.Scan(&id, &avg, &st.RatingCount, &st.BrewCount); err != nil {
-			rows.Close()
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		a := avg / 2
-		st.AvgRating = &a
-		out[id] = st
+		users = append(users, id)
 	}
-	rows.Close()
-
-	for _, q := range []struct {
-		table string
-		set   func(*Stats, int)
-	}{
-		{"coffee_opens", func(s *Stats, n int) { s.Opens = n }},
-		{"favorites", func(s *Stats, n int) { s.Favorites = n }},
-	} {
-		rows, err := s.db.QueryContext(ctx, `SELECT coffee_id, COUNT(*) FROM `+q.table+` WHERE 1=1`+userFilter+coffeeFilter+` GROUP BY coffee_id`, args...)
-		if err != nil {
-			return nil, err
-		}
-		for rows.Next() {
-			var id int64
-			var n int
-			if err := rows.Scan(&id, &n); err != nil {
-				rows.Close()
-				return nil, err
-			}
-			q.set(get(id), n)
-		}
-		rows.Close()
-	}
-	return out, rows.Err()
+	return s.stats.forUsers(users), rows.Err()
 }
 
 // ---- handlers ----
@@ -193,7 +144,7 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
+	rows, err := s.rdb.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -255,25 +206,9 @@ func (s *Server) getCoffee(w http.ResponseWriter, r *http.Request, u *User) erro
 	}
 	d := &CoffeeDetail{Coffee: *list[0]}
 	if d.Stats != nil {
-		d.Distribution = make([]int, 10)
-		rows, err := s.db.QueryContext(r.Context(),
-			`SELECT rating, COUNT(*) FROM brews WHERE coffee_id = ? AND `+includedRatings+` GROUP BY rating`, id)
-		if err != nil {
-			return err
-		}
-		for rows.Next() {
-			var rating, n int
-			if err := rows.Scan(&rating, &n); err != nil {
-				rows.Close()
-				return err
-			}
-			if rating >= 1 && rating <= 10 {
-				d.Distribution[rating-1] = n
-			}
-		}
-		rows.Close()
+		d.Distribution = s.stats.distribution(id)
 
-		groups, err := s.db.QueryContext(r.Context(), `
+		groups, err := s.rdb.QueryContext(r.Context(), `
 			SELECT g.id, g.name FROM groups g JOIN group_members m ON m.group_id = g.id
 			WHERE m.user_id = ? ORDER BY g.name`, u.ID)
 		if err != nil {
@@ -311,7 +246,7 @@ func (s *Server) getCoffee(w http.ResponseWriter, r *http.Request, u *User) erro
 
 func (s *Server) coffeeExists(ctx context.Context, id int64) error {
 	var x int
-	return s.db.QueryRowContext(ctx, `SELECT 1 FROM coffees WHERE id = ?`, id).Scan(&x)
+	return s.rdb.QueryRowContext(ctx, `SELECT 1 FROM coffees WHERE id = ?`, id).Scan(&x)
 }
 
 func (s *Server) openCoffee(w http.ResponseWriter, r *http.Request, u *User) error {
@@ -326,6 +261,7 @@ func (s *Server) openCoffee(w http.ResponseWriter, r *http.Request, u *User) err
 		`INSERT OR IGNORE INTO coffee_opens(user_id, coffee_id, opened_at) VALUES (?, ?, ?)`, u.ID, id, now()); err != nil {
 		return err
 	}
+	s.refreshStats(r, u.ID, id)
 	s.notify(r, keyCoffees, keyGroups)
 	return noContent(w)
 }
@@ -336,7 +272,7 @@ func (s *Server) unopenCoffee(w http.ResponseWriter, r *http.Request, u *User) e
 		return err
 	}
 	var n int
-	s.db.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM brews WHERE user_id = ? AND coffee_id = ?`, u.ID, id).Scan(&n)
+	s.rdb.QueryRowContext(r.Context(), `SELECT COUNT(*) FROM brews WHERE user_id = ? AND coffee_id = ?`, u.ID, id).Scan(&n)
 	if n > 0 {
 		return errf(409, "you have brews logged for this coffee; delete them first")
 	}
@@ -346,6 +282,7 @@ func (s *Server) unopenCoffee(w http.ResponseWriter, r *http.Request, u *User) e
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM favorites WHERE user_id = ? AND coffee_id = ?`, u.ID, id); err != nil {
 		return err
 	}
+	s.refreshStats(r, u.ID, id)
 	s.notify(r, keyCoffees, keyGroups)
 	return noContent(w)
 }
@@ -365,6 +302,7 @@ func (s *Server) favoriteCoffee(w http.ResponseWriter, r *http.Request, u *User)
 		`INSERT OR IGNORE INTO favorites(user_id, coffee_id, created_at) VALUES (?, ?, ?)`, u.ID, id, now()); err != nil {
 		return err
 	}
+	s.refreshStats(r, u.ID, id)
 	s.notify(r, keyCoffees, keyGroups)
 	return noContent(w)
 }
@@ -377,13 +315,14 @@ func (s *Server) unfavoriteCoffee(w http.ResponseWriter, r *http.Request, u *Use
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM favorites WHERE user_id = ? AND coffee_id = ?`, u.ID, id); err != nil {
 		return err
 	}
+	s.refreshStats(r, u.ID, id)
 	s.notify(r, keyCoffees, keyGroups)
 	return noContent(w)
 }
 
 func (s *Server) hasOpened(ctx context.Context, userID, coffeeID int64) bool {
 	var x int
-	return s.db.QueryRowContext(ctx, `SELECT 1 FROM coffee_opens WHERE user_id = ? AND coffee_id = ?`, userID, coffeeID).Scan(&x) == nil
+	return s.rdb.QueryRowContext(ctx, `SELECT 1 FROM coffee_opens WHERE user_id = ? AND coffee_id = ?`, userID, coffeeID).Scan(&x) == nil
 }
 
 func (s *Server) coffeeBrews(w http.ResponseWriter, r *http.Request, u *User) error {

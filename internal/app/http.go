@@ -15,17 +15,33 @@ import (
 )
 
 type Server struct {
-	db            *sql.DB
+	db            *sql.DB // single writer
+	rdb           *sql.DB // read-only pool
+	stats         *statsStore
 	web           fs.FS
 	secureCookies bool
 	mux           *http.ServeMux
 	events        *broker
 }
 
-func NewServer(db *sql.DB, web fs.FS, secureCookies bool) *Server {
-	s := &Server{db: db, web: web, secureCookies: secureCookies, mux: http.NewServeMux(), events: newBroker()}
+func NewServer(db, rdb *sql.DB, web fs.FS, secureCookies bool) (*Server, error) {
+	stats, err := loadStats(context.Background(), rdb)
+	if err != nil {
+		return nil, fmt.Errorf("load stats: %w", err)
+	}
+	s := &Server{db: db, rdb: rdb, stats: stats, web: web, secureCookies: secureCookies, mux: http.NewServeMux(), events: newBroker()}
 	s.routes()
-	return s
+	return s, nil
+}
+
+// refreshStats updates the in-memory aggregates after a write. Failures are
+// logged rather than surfaced: the write itself succeeded.
+func (s *Server) refreshStats(r *http.Request, userID int64, coffeeIDs ...int64) {
+	for _, cid := range coffeeIDs {
+		if err := s.stats.refresh(r.Context(), s.rdb, userID, cid); err != nil {
+			slog.Error("refresh stats", "user", userID, "coffee", cid, "err", err)
+		}
+	}
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

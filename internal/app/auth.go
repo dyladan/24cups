@@ -54,7 +54,7 @@ func (s *Server) currentUser(r *http.Request) (*User, error) {
 		return nil, nil
 	}
 	u := &User{}
-	err = s.db.QueryRowContext(r.Context(), `
+	err = s.rdb.QueryRowContext(r.Context(), `
 		SELECT u.id, u.username, u.display_name, u.reveal_unopened, u.temp_unit, u.created_at
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ? AND s.expires_at > ?`,
@@ -141,7 +141,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	}
 	var id int64
 	var hash string
-	err := s.db.QueryRowContext(r.Context(),
+	err := s.rdb.QueryRowContext(r.Context(),
 		`SELECT id, password_hash FROM users WHERE username = ?`, strings.TrimSpace(in.Username)).Scan(&id, &hash)
 	if errors.Is(err, sql.ErrNoRows) {
 		bcrypt.CompareHashAndPassword(dummyHash, []byte(in.Password))
@@ -173,7 +173,7 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request, u *User) error {
 
 func (s *Server) writeUser(w http.ResponseWriter, r *http.Request, id int64, status int) error {
 	u := &User{}
-	err := s.db.QueryRowContext(r.Context(),
+	err := s.rdb.QueryRowContext(r.Context(),
 		`SELECT id, username, display_name, reveal_unopened, temp_unit, created_at FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.RevealUnopened, &u.TempUnit, &u.CreatedAt)
 	if err != nil {
@@ -236,7 +236,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request, u *User)
 		return errf(400, "password must be 8–72 characters")
 	}
 	var hash string
-	if err := s.db.QueryRowContext(r.Context(), `SELECT password_hash FROM users WHERE id = ?`, u.ID).Scan(&hash); err != nil {
+	if err := s.rdb.QueryRowContext(r.Context(), `SELECT password_hash FROM users WHERE id = ?`, u.ID).Scan(&hash); err != nil {
 		return err
 	}
 	if bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Current)) != nil {

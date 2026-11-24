@@ -124,7 +124,13 @@ func (s *Server) notifyUser(r *http.Request, u *User, keys ...Key) {
 	s.events.publish(event{Keys: keys, userID: u.ID, origin: clientID(r)})
 }
 
-const heartbeat = 25 * time.Second
+const (
+	heartbeat = 25 * time.Second
+	// coalesce is the minimum gap between batches sent to one stream. Hints
+	// arriving in between are merged, so a busy community costs each open
+	// page at most one refetch round per window.
+	coalesce = 2 * time.Second
+)
 
 func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, u *User) error {
 	rc := http.NewResponseController(w)
@@ -154,6 +160,21 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, u *User) e
 
 	tick := time.NewTicker(heartbeat)
 	defer tick.Stop()
+	pending := map[string]Key{}
+	var flushTimer <-chan time.Time
+	var lastSent time.Time
+	send := func() error {
+		keys := make([]Key, 0, len(pending))
+		for _, k := range pending {
+			keys = append(keys, k)
+		}
+		clear(pending)
+		flushTimer = nil
+		lastSent = time.Now()
+		data, _ := json.Marshal(event{Keys: keys})
+		_, err := fmt.Fprintf(w, "event: invalidate\ndata: %s\n\n", data)
+		return err
+	}
 	for {
 		select {
 		case <-r.Context().Done():
@@ -162,7 +183,25 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, u *User) e
 			if !ok {
 				return nil
 			}
-			if _, err := fmt.Fprintf(w, "event: invalidate\ndata: %s\n\n", data); err != nil {
+			var ev event
+			if json.Unmarshal(data, &ev) == nil {
+				for _, k := range ev.Keys {
+					b, _ := json.Marshal(k)
+					pending[string(b)] = k
+				}
+			}
+			if flushTimer != nil {
+				continue // already scheduled
+			}
+			if wait := coalesce - time.Since(lastSent); wait > 0 {
+				flushTimer = time.After(wait)
+				continue
+			}
+			if err := send(); err != nil {
+				return nil
+			}
+		case <-flushTimer:
+			if err := send(); err != nil {
 				return nil
 			}
 		case <-tick.C:

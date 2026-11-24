@@ -53,7 +53,7 @@ func expect(t *testing.T, ch <-chan string, want string) {
 		if !strings.Contains(got, want) {
 			t.Errorf("got %s, want it to contain %s", got, want)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(4 * time.Second):
 		t.Errorf("no event (wanted %s)", want)
 	}
 }

@@ -35,6 +35,12 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	rdb, err := app.OpenReadDB(*dbPath)
+	if err != nil {
+		slog.Error("open read pool", "err", err)
+		os.Exit(1)
+	}
+	defer rdb.Close()
 
 	data := advent.CoffeesJSON
 	if *coffees != "" {
@@ -48,7 +54,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	handler := app.NewServer(db, advent.WebFS(), *secure)
+	handler, err := app.NewServer(db, rdb, advent.WebFS(), *secure)
+	if err != nil {
+		slog.Error("start", "err", err)
+		os.Exit(1)
+	}
 	srv := &http.Server{
 		Addr:              *addr,
 		Handler:           handler,

@@ -71,7 +71,7 @@ func scanGroups(rows *sql.Rows) ([]Group, error) {
 }
 
 func (s *Server) loadGroup(ctx context.Context, u *User, id int64) (*Group, error) {
-	rows, err := s.db.QueryContext(ctx, groupSelect+` WHERE g.id = ?`, u.ID, id)
+	rows, err := s.rdb.QueryContext(ctx, groupSelect+` WHERE g.id = ?`, u.ID, id)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func (s *Server) loadGroup(ctx context.Context, u *User, id int64) (*Group, erro
 }
 
 func (s *Server) myGroups(w http.ResponseWriter, r *http.Request, u *User) error {
-	rows, err := s.db.QueryContext(r.Context(), groupSelect+` WHERE m.user_id IS NOT NULL ORDER BY g.name COLLATE NOCASE`, u.ID)
+	rows, err := s.rdb.QueryContext(r.Context(), groupSelect+` WHERE m.user_id IS NOT NULL ORDER BY g.name COLLATE NOCASE`, u.ID)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (s *Server) discoverGroups(w http.ResponseWriter, r *http.Request, u *User)
 		esc := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q)
 		args = append(args, "%"+esc+"%", "%"+esc+"%")
 	}
-	rows, err := s.db.QueryContext(r.Context(), groupSelect+where+
+	rows, err := s.rdb.QueryContext(r.Context(), groupSelect+where+
 		` ORDER BY (SELECT COUNT(*) FROM group_members WHERE group_id = g.id) DESC, g.name LIMIT 50`, args...)
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, u *User) error
 	}
 	d := &GroupDetail{Group: *g, Members: []GroupMember{}, Coffees: []GroupCoffee{}}
 
-	rows, err := s.db.QueryContext(r.Context(), `
+	rows, err := s.rdb.QueryContext(r.Context(), `
 		SELECT u.id, u.username, u.display_name, m.role, m.joined_at,
 		       (SELECT COUNT(*) FROM coffee_opens o WHERE o.user_id = u.id),
 		       (SELECT COUNT(*) FROM brews b WHERE b.user_id = u.id AND b.is_public = 1)
@@ -210,7 +210,7 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, u *User) error
 	if err != nil {
 		return err
 	}
-	rows, err = s.db.QueryContext(r.Context(), `
+	rows, err = s.rdb.QueryContext(r.Context(), `
 		SELECT c.id, c.day, c.name, o.user_id IS NOT NULL
 		FROM coffees c LEFT JOIN coffee_opens o ON o.coffee_id = c.id AND o.user_id = ?
 		ORDER BY c.day`, u.ID)
@@ -346,7 +346,7 @@ func (s *Server) joinGroupByCode(w http.ResponseWriter, r *http.Request, u *User
 		code = code[i+1:]
 	}
 	var id int64
-	err := s.db.QueryRowContext(r.Context(), `SELECT id FROM groups WHERE invite_code = ?`, code).Scan(&id)
+	err := s.rdb.QueryRowContext(r.Context(), `SELECT id FROM groups WHERE invite_code = ?`, code).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return errf(404, "no group has that invite code")
 	} else if err != nil {

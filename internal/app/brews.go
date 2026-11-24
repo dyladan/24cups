@@ -52,7 +52,7 @@ func (s *Server) queryBrews(ctx context.Context, viewer *User, where string, lim
 		WHERE ` + where + `
 		ORDER BY b.brewed_at DESC, b.id DESC
 		LIMIT ` + strconv.Itoa(limit)
-	rows, err := s.db.QueryContext(ctx, q, append([]any{viewer.ID}, args...)...)
+	rows, err := s.rdb.QueryContext(ctx, q, append([]any{viewer.ID}, args...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +152,7 @@ func (s *Server) readBrew(w http.ResponseWriter, r *http.Request, u *User) (*bre
 	}
 	if in.RecipeID != nil {
 		var x int
-		if err := s.db.QueryRowContext(r.Context(), `SELECT 1 FROM recipes WHERE id = ? AND user_id = ?`, *in.RecipeID, u.ID).Scan(&x); err != nil {
+		if err := s.rdb.QueryRowContext(r.Context(), `SELECT 1 FROM recipes WHERE id = ? AND user_id = ?`, *in.RecipeID, u.ID).Scan(&x); err != nil {
 			in.RecipeID = nil
 		}
 	}
@@ -208,7 +208,7 @@ func (s *Server) createBrew(w http.ResponseWriter, r *http.Request, u *User) err
 		return err
 	}
 	id, _ := res.LastInsertId()
-	s.brewChanged(r, u)
+	s.brewChanged(r, u, in.CoffeeID)
 	list, err := s.queryBrews(r.Context(), u, `b.id = ?`, 1, id)
 	if err != nil {
 		return err
@@ -224,6 +224,10 @@ func (s *Server) updateBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	}
 	in, label, err := s.readBrew(w, r, u)
 	if err != nil {
+		return err
+	}
+	var oldCoffee int64
+	if err := s.rdb.QueryRowContext(r.Context(), `SELECT coffee_id FROM brews WHERE id = ? AND user_id = ?`, id, u.ID).Scan(&oldCoffee); err != nil {
 		return err
 	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
@@ -251,7 +255,11 @@ func (s *Server) updateBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	s.brewChanged(r, u)
+	if oldCoffee == in.CoffeeID {
+		s.brewChanged(r, u, in.CoffeeID)
+	} else {
+		s.brewChanged(r, u, oldCoffee, in.CoffeeID)
+	}
 	list, err := s.queryBrews(r.Context(), u, `b.id = ?`, 1, id)
 	if err != nil {
 		return err
@@ -265,17 +273,25 @@ func (s *Server) deleteBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	if err != nil {
 		return err
 	}
+	var coffeeID int64
+	err = s.rdb.QueryRowContext(r.Context(), `SELECT coffee_id FROM brews WHERE id = ? AND user_id = ?`, id, u.ID).Scan(&coffeeID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return noContent(w)
+	} else if err != nil {
+		return err
+	}
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM brews WHERE id = ? AND user_id = ?`, id, u.ID); err != nil {
 		return err
 	}
-	s.brewChanged(r, u)
+	s.brewChanged(r, u, coffeeID)
 	return noContent(w)
 }
 
 // brewChanged covers stats, coffee brew lists, group feeds and the owner's
 // own brew list. Private brews still move averages unless excluded, so
 // everyone is told; they refetch only what they're allowed to see.
-func (s *Server) brewChanged(r *http.Request, u *User) {
+func (s *Server) brewChanged(r *http.Request, u *User, coffeeIDs ...int64) {
+	s.refreshStats(r, u.ID, coffeeIDs...)
 	s.notify(r, keyCoffees, keyGroups)
 	s.notifyUser(r, u, keyBrews)
 }
