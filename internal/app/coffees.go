@@ -167,7 +167,7 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 		}
 		c.Opened = c.OpenedAt != nil
 		if u.anon {
-			c.Opened, c.Favorited = c.Day <= u.anonDay, false
+			c.Opened, c.Favorited = u.anonCanSee(c.Day), false
 		}
 		if myAvg != nil {
 			v := *myAvg / 2
@@ -176,7 +176,7 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 		// myAvg is non-nil exactly when the user has a rated brew.
 		c.Revealed = u.isRevealed(c.Opened, myAvg != nil, manual)
 		if u.anon {
-			c.Revealed = c.Opened && u.anonSpoilers
+			c.Revealed = c.Opened
 		}
 		st := stats[c.ID]
 		if st == nil {
@@ -373,7 +373,7 @@ func (s *Server) coffeeBrews(w http.ResponseWriter, r *http.Request, u *User) er
 		if err := s.rdb.QueryRowContext(r.Context(), `SELECT day FROM coffees WHERE id = ?`, id).Scan(&day); err != nil {
 			return err
 		}
-		if day > u.anonDay || !u.anonSpoilers {
+		if !u.anonCanSee(day) {
 			writeJSON(w, 200, []*Brew{})
 			return nil
 		}

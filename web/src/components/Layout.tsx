@@ -36,7 +36,7 @@ function AnonNav() {
         role="switch"
         aria-checked={spoilers}
         onClick={() => setSpoilers(!spoilers)}
-        title={spoilers ? 'Hide community ratings' : 'Show community ratings'}
+        title={spoilers ? "Hide today's door" : "Peek at today's door"}
         className={clsx(
           'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
           spoilers ? 'border-gold bg-gold/15 text-ink' : 'border-line text-ink-2 hover:text-ink',

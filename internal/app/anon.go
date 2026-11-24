@@ -5,12 +5,21 @@ import (
 	"time"
 )
 
-// Anonymous (signed-out) visitors see the calendar opened up to "today":
-// their own local date, but never later than the date in the earliest time
-// zone on Earth (UTC+14), so a faked date can't unlock tomorrow's door.
-// Community ratings are spoilers for them unless they turn spoilers on.
+// Anonymous (signed-out) visitors see everything for days before "today":
+// coffee, tasting notes, ratings and public brews. Today's door stays sealed,
+// so a member browsing signed out isn't spoiled before opening it, unless
+// the visitor turns spoilers on. Later doors are always sealed.
+//
+// "Today" is the visitor's own local date, but never later than the date in
+// the earliest time zone on Earth (UTC+14), so a faked date can't unlock a
+// door early.
 
 var earliestZone = time.FixedZone("UTC+14", 14*60*60)
+
+// anonCanSee reports whether a signed-out visitor sees the given day.
+func (u *User) anonCanSee(day int) bool {
+	return day < u.anonDay || (day == u.anonDay && u.anonSpoilers)
+}
 
 // anonViewer builds the pseudo-user for a signed-out request.
 func (s *Server) anonViewer(r *http.Request) *User {
@@ -21,9 +30,9 @@ func (s *Server) anonViewer(r *http.Request) *User {
 	}
 }
 
-// unlockedDay returns how many doors are open for an anonymous visitor:
+// unlockedDay returns "today" as a door number for an anonymous visitor:
 // 0 before December 1 of the calendar year, the day of the month during
-// December, and effectively all of them afterwards.
+// December, and past every door afterwards.
 func (s *Server) unlockedDay(r *http.Request) int {
 	now := s.now()
 	latest := civil(now.In(earliestZone))

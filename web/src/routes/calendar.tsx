@@ -68,7 +68,7 @@ function Door({ c, today, anon }: { c: Coffee; today: boolean; anon: boolean }) 
           <StatRow stats={c.stats} className="relative !text-door-ink [&_*]:!text-door-ink" />
         ) : (
           <span className="relative text-[0.65rem] font-semibold uppercase tracking-[0.2em] opacity-70 transition group-hover:opacity-100">
-            {anon ? `Opens Dec ${c.day}` : 'Open door →'}
+            {anon ? (today ? 'Hidden · spoilers to peek' : `Opens Dec ${c.day}`) : 'Open door →'}
           </span>
         )}
       </Link>
@@ -115,11 +115,11 @@ export function CalendarPage() {
   if (error) return <ErrorText error={error} />
   const opened = data.filter((c) => c.opened).length
   const eyebrow = anon
-    ? opened === 0
-      ? 'Doors open December 1'
-      : opened >= data.length
-        ? `All ${data.length} doors open`
-        : `Day ${opened} of ${data.length}`
+    ? today != null && today <= data.length
+      ? `Day ${today} of ${data.length}`
+      : opened === 0
+        ? 'Doors open December 1'
+        : `All ${data.length} doors open`
     : `Hi ${me?.displayName ?? ''} · ${opened} of ${data.length} opened`
   return (
     <>
@@ -136,8 +136,9 @@ export function CalendarPage() {
       </PageHeader>
       {anon && (
         <p className="-mt-3 mb-6 max-w-2xl text-sm text-ink-2">
-          A community log for this year’s coffee advent calendar. Doors open day by day; community ratings stay hidden unless you
-          switch on <span className="font-semibold">Spoilers</span> at the top.
+          A community log for this year’s coffee advent calendar. Past days show everything: tasting notes, ratings and brews.
+          Today’s door stays sealed so members who haven’t opened it yet aren’t spoiled; switch on{' '}
+          <span className="font-semibold">Spoilers</span> at the top to peek.
         </p>
       )}
       <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-paper-2">

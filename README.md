@@ -6,11 +6,13 @@ Lab or Fellow**.
 
 - **Calendar**: one door per day. Unopened doors hide the coffee. You can open
   a door without logging a brew.
-- **Signed-out visitors** see the calendar with doors open up to their local
-  date. A date ahead of the earliest time zone on Earth (UTC+14) isn't
-  honored, so tomorrow can't be unlocked early. They see tasting notes; community ratings and
-  public brews show only with the **Spoilers** switch in the header (saved
-  on the device). The December is set with `-calendar-year` / `CALENDAR_YEAR`.
+- **Signed-out visitors** see everything for days before today: coffee,
+  tasting notes, ratings and public brews. Today's door stays sealed, so a
+  member browsing signed out isn't spoiled before opening it, unless they flip the
+  **Spoilers** switch in the header (saved on the device). Later doors are
+  always sealed. "Today" is the visitor's local date, capped at the date in
+  UTC+14 so a faked clock can't unlock doors early. The December is set with
+  `-calendar-year` / `CALENDAR_YEAR`.
 - **Blind tasting** (default): after opening a coffee, its tasting notes,
   community scores and other people's brews stay hidden until you log a rated
   brew or tap "Reveal now". This is enforced by the API, not just the UI. Profile → Spoilers can

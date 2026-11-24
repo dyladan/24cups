@@ -6,7 +6,7 @@ import { api, coffeeBrewsQuery, coffeeKeys, coffeeQuery, coffeesQuery, useApiMut
 import { BrewCard } from '../components/BrewCard'
 import { Blossom, Empty, ErrorText, Spinner, Stars, TastingNotes } from '../components/ui'
 import { formatRating, plural } from '../lib/format'
-import { StatRow } from './calendar'
+import { StatRow, todayDay } from './calendar'
 import { useAnonSpoilers, useCoffeeView } from '../lib/anon'
 
 const route = getRouteApi('/public/coffee/$coffeeId')
@@ -54,26 +54,6 @@ function BlindPanel({ c, onReveal, pending }: { c: CoffeeDetail; onReveal: () =>
           <Eye size={16} /> Reveal now
         </button>
       </div>
-    </section>
-  )
-}
-
-/** Signed-out visitors with spoilers off. */
-function AnonSpoilerPanel({ c, onShow }: { c: CoffeeDetail; onShow: () => void }) {
-  return (
-    <section className="card p-5">
-      <p className="eyebrow mb-3 flex items-center gap-1.5">
-        <EyeOff size={13} /> Ratings hidden
-      </p>
-      <p className="text-sm text-ink-2">Community ratings are spoilers, so they’re off by default.</p>
-      {c.stats && (
-        <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-ink-3 tabular-nums">
-          <Eye size={13} /> {plural(c.stats.opens, 'member has', 'members have')} opened this door
-        </p>
-      )}
-      <button className="btn btn-ghost mt-4" onClick={onShow}>
-        <Eye size={16} /> Show spoilers
-      </button>
     </section>
   )
 }
@@ -189,10 +169,23 @@ export function CoffeePage() {
           <h1 className="display mt-8 text-3xl">Still sealed</h1>
           {anon ? (
             <>
-              <p className="mt-2 text-ink-2">Door {c.day} opens on December {c.day}. Join to open doors early, log your brews and rate the lineup.</p>
-              <Link to="/register" search={{ redirect: `/coffee/${c.id}` }} className="btn btn-accent mt-6">
-                Join to log &amp; rate
-              </Link>
+              {todayDay() === c.day ? (
+                <p className="mt-2 text-ink-2">
+                  Today’s door stays sealed so members who haven’t opened it yet aren’t spoiled. Switch on spoilers to peek.
+                </p>
+              ) : (
+                <p className="mt-2 text-ink-2">Door {c.day} opens on December {c.day}. Join to log your brews and rate the lineup.</p>
+              )}
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {todayDay() === c.day && (
+                  <button className="btn btn-ghost" onClick={() => setSpoilers(true)}>
+                    <Eye size={16} /> Peek at today
+                  </button>
+                )}
+                <Link to="/register" search={{ redirect: `/coffee/${c.id}` }} className="btn btn-accent">
+                  Join to log &amp; rate
+                </Link>
+              </div>
             </>
           ) : (
             <>
@@ -304,17 +297,7 @@ export function CoffeePage() {
           <section className="mt-10">
             <h2 className="display mb-4 text-2xl">Community brews</h2>
             {!c.revealed ? (
-              anon ? (
-                <Empty>
-                  Brews include ratings, so they’re hidden.{' '}
-                  <button className="font-semibold text-ink underline underline-offset-4" onClick={() => setSpoilers(true)}>
-                    Turn on spoilers
-                  </button>{' '}
-                  to see them.
-                </Empty>
-              ) : (
-                <Empty>Hidden until you rate this coffee, so other people’s ratings don’t sway yours.</Empty>
-              )
+              <Empty>Hidden until you rate this coffee, so other people’s ratings don’t sway yours.</Empty>
             ) : others.length ? (
               <div className="space-y-3">
                 {others.map((b) => (
@@ -330,8 +313,6 @@ export function CoffeePage() {
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           {c.revealed ? (
             <StatsPanel c={c} />
-          ) : anon ? (
-            <AnonSpoilerPanel c={c} onShow={() => setSpoilers(true)} />
           ) : (
             <BlindPanel c={c} onReveal={() => reveal.mutate()} pending={reveal.isPending} />
           )}
