@@ -4,6 +4,7 @@ import clsx from 'clsx'
 import { Eye, EyeOff, Heart, Star } from 'lucide-react'
 import { coffeesQuery, meQuery, type Coffee, type Stats } from '../api'
 import { useCoffeeView } from '../lib/anon'
+import { PeekButton, usePeek } from '../components/Peek'
 import { Blossom, ErrorText, PageHeader, Spinner, TastingNotes } from '../components/ui'
 import { formatRating } from '../lib/format'
 
@@ -46,33 +47,56 @@ export function StatRow({ stats, className }: { stats: Stats; className?: string
   )
 }
 
-function Door({ c, today, anon }: { c: Coffee; today: boolean; anon: boolean }) {
-  if (!c.opened) {
-    return (
-      <Link
-        to="/coffee/$coffeeId"
-        params={{ coffeeId: c.id }}
-        className={clsx(
-          'group relative flex min-h-52 flex-col justify-between overflow-hidden rounded-2xl p-4 text-door-ink transition hover:-translate-y-0.5 hover:shadow-lg md:aspect-square',
-          today ? 'bg-[#141110] ring-2 ring-door-ink/70' : 'bg-door',
-        )}
-      >
-        {/* foil frame */}
-        <span className="pointer-events-none absolute inset-2 rounded-xl border border-door-ink/25" />
-        <div className="relative flex items-start justify-between">
-          <span className="text-[0.62rem] font-semibold uppercase tracking-[0.3em] opacity-80">{today ? 'Today' : 'Day'}</span>
-          <Blossom size={18} className="opacity-60 transition group-hover:rotate-45 group-hover:opacity-100" />
+function SealedDoor({ c, today, anon }: { c: Coffee; today: boolean; anon: boolean }) {
+  const { on, peek, loading, toggle } = usePeek(c.id)
+  return (
+    <div
+      className={clsx(
+        'group relative flex min-h-52 flex-col justify-between overflow-hidden rounded-2xl p-4 text-door-ink transition hover:-translate-y-0.5 hover:shadow-lg md:aspect-square',
+        today ? 'bg-[#141110] ring-2 ring-door-ink/70' : 'bg-door',
+      )}
+    >
+      {/* The whole door is the link; content sits above it but lets clicks through. */}
+      <Link to="/coffee/$coffeeId" params={{ coffeeId: c.id }} className="absolute inset-0" aria-label={`Day ${c.day}`} />
+      {/* foil frame */}
+      <span className="pointer-events-none absolute inset-2 rounded-xl border border-door-ink/25" />
+      <div className="pointer-events-none relative flex items-start justify-between">
+        <span className="text-[0.62rem] font-semibold uppercase tracking-[0.3em] opacity-80">
+          {today ? 'Today' : 'Day'}
+          {peek && ` ${c.day}`}
+        </span>
+        <Blossom size={18} className="opacity-60 transition group-hover:rotate-45 group-hover:opacity-100" />
+      </div>
+      {peek ? (
+        <div className="pointer-events-none relative min-w-0">
+          {peek.origin && <p className="mb-1 truncate text-[0.62rem] font-semibold uppercase tracking-[0.24em] opacity-80">{peek.origin}</p>}
+          <p className="display line-clamp-3 !text-door-ink text-2xl sm:text-3xl">{peek.name}</p>
         </div>
-        <span className="display relative !text-door-ink text-7xl sm:text-8xl">{String(c.day).padStart(2, '0')}</span>
+      ) : (
+        <span className="display pointer-events-none relative !text-door-ink text-7xl sm:text-8xl">{String(c.day).padStart(2, '0')}</span>
+      )}
+      <div className="relative flex items-end justify-between gap-2">
         {c.stats ? (
-          <StatRow stats={c.stats} className="relative !text-door-ink [&_*]:!text-door-ink" />
+          <StatRow stats={c.stats} className="pointer-events-none !text-door-ink [&_*]:!text-door-ink" />
         ) : (
-          <span className="relative text-[0.65rem] font-semibold uppercase tracking-[0.2em] opacity-70 transition group-hover:opacity-100">
-            {anon ? (today ? 'Hidden · spoilers to peek' : `Opens Dec ${c.day}`) : 'Open door →'}
+          <span className="pointer-events-none text-[0.65rem] font-semibold uppercase tracking-[0.2em] opacity-70 transition group-hover:opacity-100">
+            {anon ? (today ? 'Hidden today' : `Opens Dec ${c.day}`) : 'Open door →'}
           </span>
         )}
-      </Link>
-    )
+        <PeekButton
+          on={on}
+          loading={loading}
+          onToggle={toggle}
+          className="relative z-10 shrink-0 border-door-ink/40 text-door-ink hover:bg-door-ink/15"
+        />
+      </div>
+    </div>
+  )
+}
+
+function Door({ c, today, anon }: { c: Coffee; today: boolean; anon: boolean }) {
+  if (!c.opened) {
+    return <SealedDoor c={c} today={today} anon={anon} />
   }
   const info = c.info!
   return (
@@ -138,7 +162,7 @@ export function CalendarPage() {
         <p className="-mt-3 mb-6 max-w-2xl text-sm text-ink-2">
           A community log for this year’s coffee advent calendar. Past days show everything: tasting notes, ratings and brews.
           Today’s door stays sealed so members who haven’t opened it yet aren’t spoiled; switch on{' '}
-          <span className="font-semibold">Spoilers</span> at the top to peek.
+          <span className="font-semibold">Spoilers</span> at the top to see it, or Peek at any door for just its name.
         </p>
       )}
       <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-paper-2">

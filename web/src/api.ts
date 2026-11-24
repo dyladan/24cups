@@ -218,6 +218,14 @@ export const coffeeQuery = (id: number, view: CoffeeView | null = null) =>
 export const coffeeBrewsQuery = (id: number, view: CoffeeView | null = null) =>
   queryOptions({ queryKey: ['coffees', id, 'brews', view], queryFn: () => api<Brew[]>(`/coffees/${id}/brews${viewQS(view)}`) })
 
+/** Name and origin of a sealed coffee. Not recorded anywhere; just for this visit. */
+export const peekQuery = (id: number) =>
+  queryOptions({
+    queryKey: ['peek', id],
+    queryFn: () => api<{ name: string; origin: string }>(`/coffees/${id}/peek`),
+    staleTime: Infinity,
+  })
+
 export const recipesQuery = queryOptions({ queryKey: ['recipes'], queryFn: () => api<Recipe[]>('/recipes') })
 export const grindersQuery = queryOptions({ queryKey: ['grinders'], queryFn: () => api<Grinder[]>('/grinders') })
 export const myBrewsQuery = queryOptions({ queryKey: ['brews'], queryFn: () => api<Brew[]>('/brews') })

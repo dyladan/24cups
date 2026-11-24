@@ -8,6 +8,7 @@ import { Blossom, Empty, ErrorText, Spinner, Stars, TastingNotes } from '../comp
 import { formatRating, plural } from '../lib/format'
 import { StatRow, todayDay } from './calendar'
 import { useAnonSpoilers, useCoffeeView } from '../lib/anon'
+import { PeekButton, usePeek } from '../components/Peek'
 
 const route = getRouteApi('/public/coffee/$coffeeId')
 
@@ -113,6 +114,7 @@ function StatsPanel({ c }: { c: CoffeeDetail }) {
 export function CoffeePage() {
   const { coffeeId } = route.useParams()
   const { view, ready, anon } = useCoffeeView()
+  const peek = usePeek(coffeeId)
   const [, setSpoilers] = useAnonSpoilers()
   const { data: c, isPending, error } = useQuery({ ...coffeeQuery(coffeeId, view), enabled: ready })
   const { data: all } = useQuery({ ...coffeesQuery(view), enabled: ready })
@@ -166,12 +168,22 @@ export function CoffeePage() {
             <span className="text-xs font-semibold uppercase tracking-[0.3em] opacity-80">Day</span>
             <span className="display !text-door-ink text-[7rem]">{String(c.day).padStart(2, '0')}</span>
           </div>
+          <div className="mt-6 flex justify-center">
+            <PeekButton on={peek.on} loading={peek.loading} onToggle={peek.toggle} className="border-line text-ink-2 hover:text-ink" />
+          </div>
+          {peek.peek && (
+            <div className="mt-4">
+              {peek.peek.origin && <p className="eyebrow mb-1">{peek.peek.origin}</p>}
+              <p className="display text-4xl">{peek.peek.name}</p>
+              <p className="mt-1 text-xs text-ink-3">Just a peek: the door stays sealed.</p>
+            </div>
+          )}
           <h1 className="display mt-8 text-3xl">Still sealed</h1>
           {anon ? (
             <>
               {todayDay() === c.day ? (
                 <p className="mt-2 text-ink-2">
-                  Today’s door stays sealed so members who haven’t opened it yet aren’t spoiled. Switch on spoilers to peek.
+                  Today’s door stays sealed so members who haven’t opened it yet aren’t spoiled. Switch on spoilers to see everything.
                 </p>
               ) : (
                 <p className="mt-2 text-ink-2">Door {c.day} opens on December {c.day}. Join to log your brews and rate the lineup.</p>
@@ -179,7 +191,7 @@ export function CoffeePage() {
               <div className="mt-6 flex flex-wrap justify-center gap-2">
                 {todayDay() === c.day && (
                   <button className="btn btn-ghost" onClick={() => setSpoilers(true)}>
-                    <Eye size={16} /> Peek at today
+                    <Eye size={16} /> Turn on spoilers
                   </button>
                 )}
                 <Link to="/register" search={{ redirect: `/coffee/${c.id}` }} className="btn btn-accent">

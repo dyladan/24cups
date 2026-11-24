@@ -340,6 +340,26 @@ func (s *Server) unfavoriteCoffee(w http.ResponseWriter, r *http.Request, u *Use
 	return noContent(w)
 }
 
+// peekCoffee returns only a coffee's name and origin, so a sealed door can
+// be peeked at without opening it (no notes, scores or brews, and it isn't
+// recorded). Available to signed-out visitors too.
+func (s *Server) peekCoffee(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	var out struct {
+		Name   string `json:"name"`
+		Origin string `json:"origin"`
+	}
+	if err := s.rdb.QueryRowContext(r.Context(), `SELECT name, origin FROM coffees WHERE id = ?`, id).Scan(&out.Name, &out.Origin); err != nil {
+		return err
+	}
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	writeJSON(w, 200, out)
+	return nil
+}
+
 // revealCoffee shows tasting notes and community scores for an opened
 // coffee before the user has rated it.
 func (s *Server) revealCoffee(w http.ResponseWriter, r *http.Request, u *User) error {

@@ -132,3 +132,29 @@ func TestAnonymousBeforeAndAfterDecember(t *testing.T) {
 		t.Errorf("January: %d open", n)
 	}
 }
+
+func TestPeekShowsOnlyNameAndOrigin(t *testing.T) {
+	srv := setupAt(t, time.Date(2026, 12, 3, 12, 0, 0, 0, time.UTC))
+	srv.Config.Handler.(*Server).db.Exec(`UPDATE coffees SET origin = 'Kenya' WHERE day = 20`)
+	for _, c := range []*client{newClient(t, srv), func() *client {
+		m := newClient(t, srv)
+		m.do("POST", "/auth/register", `{"username":"member","password":"password1"}`, nil)
+		return m
+	}()} {
+		var raw map[string]any
+		if s := c.do("GET", "/coffees/20/peek", "", &raw); s != 200 {
+			t.Fatalf("peek: %d", s)
+		}
+		if raw["name"] != "C20" || raw["origin"] != "Kenya" || len(raw) != 2 {
+			t.Errorf("peek returned %v, want only name and origin", raw)
+		}
+		var list []Coffee
+		c.do("GET", "/coffees", "", &list)
+		if list[19].Opened || list[19].Info != nil {
+			t.Errorf("peeking opened the door: %+v", list[19])
+		}
+	}
+	if s := newClient(t, srv).do("GET", "/coffees/99/peek", "", nil); s != 404 {
+		t.Errorf("unknown coffee: %d", s)
+	}
+}
