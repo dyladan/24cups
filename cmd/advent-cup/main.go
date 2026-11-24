@@ -15,7 +15,11 @@ import (
 
 	advent "github.com/dyladan/advent-cup"
 	"github.com/dyladan/advent-cup/internal/app"
+	"github.com/dyladan/advent-cup/internal/telemetry"
 )
+
+// version is set at build time (-ldflags "-X main.version=...").
+var version = "dev"
 
 func envOr(k, def string) string {
 	if v := os.Getenv(k); v != "" {
@@ -60,6 +64,24 @@ func main() {
 	tsHosts := flag.String("turnstile-hostnames", envOr("TURNSTILE_HOSTNAMES", ""), "comma-separated hostnames Turnstile tokens must come from")
 	noLimits := flag.Bool("no-rate-limits", envOr("NO_RATE_LIMITS", "false") == "true", "disable rate limits (benchmarks only)")
 	flag.Parse()
+
+	// Telemetry first so the database, startup logs and server are covered.
+	otelShutdown, err := telemetry.Setup(context.Background(), version)
+	if err != nil {
+		slog.Error("telemetry", "err", err)
+		os.Exit(1)
+	}
+	slog.SetDefault(slog.New(telemetry.LogHandler(slog.LevelInfo)))
+	if telemetry.Enabled() {
+		slog.Info("telemetry enabled", "version", version)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelShutdown(ctx); err != nil {
+			slog.Warn("telemetry shutdown", "err", err)
+		}
+	}()
 
 	db, err := app.OpenDB(*dbPath)
 	if err != nil {
@@ -115,7 +137,7 @@ func main() {
 	}
 	srv := &http.Server{
 		Addr:              *addr,
-		Handler:           handler,
+		Handler:           handler.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,

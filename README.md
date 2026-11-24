@@ -95,6 +95,34 @@ generator on the same Pi limited to 1–2 cores:
 | 2,000 open pages + 2 brews/s (live-update refetch storm) | ~2,000 refetches/s, p95 2.7 ms, p99 9.5 ms, ≤ 1.2 cores |
 | Memory | ~80 MB at 5,000 users; ~310 MB with 2,000 open live streams |
 
+## Observability (OpenTelemetry)
+
+Traces, metrics and logs are exported over OTLP. They're configured only
+with the standard `OTEL_*` environment variables, and off unless an
+endpoint is set (`OTEL_SDK_DISABLED=true` also turns them off).
+
+- **Traces:** a server span per API request, named by route (e.g.
+  `GET /api/coffees/{id}`, stable HTTP semantic conventions with `http.route`). SQLite
+  queries are child spans (`db.system.name=sqlite`), and the Turnstile
+  Siteverify call is a client span. Static files, `/api/health` and the
+  long-lived `/api/events` stream aren't traced; neither are queries outside
+  a request (startup). Sampling: `OTEL_TRACES_SAMPLER(_ARG)`.
+- **Metrics:** `http.server.request.duration` and body sizes,
+  `db.client.operation.duration` and `db.sql.connection.*` (per pool:
+  `read`/`write`), Go runtime (`go.*`), and app metrics:
+  `advent.signups`, `advent.logins` (`advent.outcome`),
+  `advent.brews.created`, `advent.rate_limit.rejections` (`advent.limiter`),
+  `advent.turnstile.verifications`, `advent.live_updates.streams`.
+- **Logs:** the server's slog output also goes out as OTLP logs, correlated
+  with the active span; it still prints to stderr.
+- **Resource:** `service.name=advent-cup`, `service.version` (build arg
+  `VERSION`), `host.name`, `deployment.environment.name` from
+  `OTEL_RESOURCE_ATTRIBUTES`.
+
+`compose.yaml` sends metrics with delta temporality (Dynatrace requires it)
+to the collector on the Docker host via `host.docker.internal:4318`.
+Full-rate tracing cost about 10% of peak throughput in the Pi benchmark.
+
 ## Stack
 
 Go (net/http, SQLite via pure-Go `modernc.org/sqlite`, bcrypt sessions) serving

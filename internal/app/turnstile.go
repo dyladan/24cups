@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Cloudflare Turnstile on sign-up. The browser renders the widget and sends
@@ -53,11 +55,19 @@ func ParseHostnames(s string) []string {
 	return out
 }
 
-var siteverifyClient = &http.Client{Timeout: 10 * time.Second}
+// Outbound Siteverify calls get client spans (child of the sign-up request).
+var siteverifyClient = &http.Client{Timeout: 10 * time.Second, Transport: otelhttp.NewTransport(http.DefaultTransport)}
 
 // verifyTurnstile checks a token for the given action. Any failure,
 // including network errors and non-200 responses, is a rejection.
-func (s *Server) verifyTurnstile(r *http.Request, token, action string) error {
+func (s *Server) verifyTurnstile(r *http.Request, token, action string) (err error) {
+	defer func() {
+		result := "success"
+		if err != nil {
+			result = "rejected"
+		}
+		count(r.Context(), mTurnstile, outcome(result))
+	}()
 	t := s.turnstile
 	reject := errf(http.StatusForbidden, "The bot check failed. Please try again.")
 	if len(token) == 0 || len(token) > 2048 || len(t.Hostnames) == 0 {

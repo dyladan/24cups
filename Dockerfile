@@ -7,12 +7,13 @@ COPY web/ ./
 RUN npm run build
 
 FROM golang:1.26-alpine AS server
+ARG VERSION=dev
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /advent-cup ./cmd/advent-cup \
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /advent-cup ./cmd/advent-cup \
  && mkdir /data
 
 FROM gcr.io/distroless/static-debian12:nonroot

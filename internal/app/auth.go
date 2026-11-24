@@ -108,7 +108,7 @@ type credentials struct {
 
 func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
 	if ok, wait := s.guards.signup.allow(s.clientIP(r)); !ok {
-		return tooMany(w, "Too many new accounts from your network.", wait)
+		return tooMany(w, r, "signup", "Too many new accounts from your network.", wait)
 	}
 	var in credentials
 	if err := readJSON(w, r, &in); err != nil {
@@ -152,6 +152,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	id, _ := res.LastInsertId()
+	count(r.Context(), mSignups)
 	if err := s.startSession(w, r, id); err != nil {
 		return err
 	}
@@ -160,7 +161,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	if ok, wait := s.guards.login.allow(s.clientIP(r)); !ok {
-		return tooMany(w, "Too many sign-in attempts from your network.", wait)
+		return tooMany(w, r, "login", "Too many sign-in attempts from your network.", wait)
 	}
 	var in credentials
 	if err := readJSON(w, r, &in); err != nil {
@@ -168,7 +169,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	}
 	name := strings.ToLower(strings.TrimSpace(in.Username))
 	if blocked, wait := s.guards.loginFails.blocked(name); blocked {
-		return tooMany(w, "Too many failed sign-ins for this account.", wait)
+		return tooMany(w, r, "login_failures", "Too many failed sign-ins for this account.", wait)
 	}
 	var id int64
 	var hash string
@@ -189,10 +190,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if !match || id == 0 {
+		count(r.Context(), mLogins, outcome("failure"))
 		s.guards.loginFails.spend(name)
 		s.guards.failDelay(r.Context())
 		return errf(401, "wrong username or password")
 	}
+	count(r.Context(), mLogins, outcome("success"))
 	if err := s.startSession(w, r, id); err != nil {
 		return err
 	}
@@ -302,7 +305,7 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request, u *User)
 	}
 	key := strconv.FormatInt(u.ID, 10)
 	if blocked, wait := s.guards.pwFails.blocked(key); blocked {
-		return tooMany(w, "Too many wrong passwords.", wait)
+		return tooMany(w, r, "password_failures", "Too many wrong passwords.", wait)
 	}
 	var hash string
 	if err := s.rdb.QueryRowContext(r.Context(), `SELECT password_hash FROM users WHERE id = ?`, u.ID).Scan(&hash); err != nil {

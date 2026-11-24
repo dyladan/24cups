@@ -1,18 +1,23 @@
 package app
 
 import (
+	"context"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"runtime"
 	"time"
 
+	"github.com/XSAM/otelsql"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/trace"
 	_ "modernc.org/sqlite"
 )
 
 // OpenDB opens (creating if needed) the SQLite database and applies migrations.
 func OpenDB(path string) (*sql.DB, error) {
 	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)", path)
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openInstrumented(dsn, "write")
 	if err != nil {
 		return nil, err
 	}
@@ -29,13 +34,39 @@ func OpenDB(path string) (*sql.DB, error) {
 // in parallel with each other and with the single writer from OpenDB.
 func OpenReadDB(path string) (*sql.DB, error) {
 	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)&_pragma=query_only(1)", path)
-	db, err := sql.Open("sqlite", dsn)
+	db, err := openInstrumented(dsn, "read")
 	if err != nil {
 		return nil, err
 	}
 	n := runtime.NumCPU() * 2
 	db.SetMaxOpenConns(n)
 	db.SetMaxIdleConns(n)
+	return db, nil
+}
+
+// openInstrumented opens SQLite with OpenTelemetry spans per query (row
+// iteration and connection-housekeeping spans omitted as noise) and
+// connection-pool metrics labelled by pool.
+func openInstrumented(dsn, pool string) (*sql.DB, error) {
+	attrs := otelsql.WithAttributes(semconv.DBSystemNameSQLite)
+	db, err := otelsql.Open("sqlite", dsn, attrs, otelsql.WithSpanOptions(otelsql.SpanOptions{
+		OmitRows: true, OmitConnResetSession: true, OmitConnPrepare: true, DisableErrSkip: true,
+		OmitConnectorConnect: true,
+		// Only trace queries made on behalf of a traced request; startup work
+		// (migrations, seeding, loading stats) would otherwise produce dozens
+		// of single-span traces on every boot.
+		SpanFilter: func(ctx context.Context, _ otelsql.Method, _ string, _ []driver.NamedValue) bool {
+			return trace.SpanContextFromContext(ctx).IsValid()
+		},
+	}))
+	if err != nil {
+		return nil, err
+	}
+	if _, err := otelsql.RegisterDBStatsMetrics(db, otelsql.WithAttributes(
+		semconv.DBSystemNameSQLite, semconv.DBClientConnectionPoolName(pool))); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return db, nil
 }
 

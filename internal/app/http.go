@@ -11,6 +11,11 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/codes"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	"go.opentelemetry.io/otel/trace"
 	"strings"
 	"time"
 )
@@ -69,6 +74,7 @@ func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
 		s.calendarYear = s.now().Year()
 	}
 	s.routes()
+	s.events.registerStreamGauge()
 	return s, nil
 }
 
@@ -92,7 +98,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, "/api/") {
 		if ok, wait := s.guards.ip.allow(s.clientIP(r)); !ok {
 			s.h(func(w http.ResponseWriter, r *http.Request) error {
-				return tooMany(w, "Too many requests from your network.", wait)
+				return tooMany(w, r, "ip", "Too many requests from your network.", wait)
 			})(w, r)
 			return
 		}
@@ -106,6 +112,38 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.mux.ServeHTTP(w, r)
+	// The mux records the matched pattern on r; add the route to the server
+	// span (otelhttp uses it for the span name and metrics).
+	if r.Pattern != "" {
+		trace.SpanFromContext(r.Context()).SetAttributes(semconv.HTTPRoute(routeOf(r.Pattern)))
+	}
+}
+
+// routeOf strips the method from a ServeMux pattern ("GET /api/x" -> "/api/x").
+func routeOf(pattern string) string {
+	if _, path, ok := strings.Cut(pattern, " "); ok {
+		return path
+	}
+	return pattern
+}
+
+// Handler wraps the server with OpenTelemetry HTTP instrumentation. API
+// requests get server spans named by route (e.g. "GET /api/coffees/{id}") and
+// http.server.request.duration metrics. Static files, health checks and the
+// long-lived live-update stream are excluded.
+func (s *Server) Handler() http.Handler {
+	return otelhttp.NewHandler(s, "advent-cup",
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			p := r.URL.Path
+			return strings.HasPrefix(p, "/api/") && p != "/api/health" && p != "/api/events"
+		}),
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+			if r.Pattern == "" {
+				return r.Method
+			}
+			return r.Method + " " + routeOf(r.Pattern)
+		}),
+	)
 }
 
 func isSafeMethod(m string) bool {
@@ -256,7 +294,10 @@ func (s *Server) h(fn handlerFunc) http.HandlerFunc {
 				writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 				return
 			}
-			slog.Error("request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+			slog.ErrorContext(r.Context(), "request failed", "method", r.Method, "path", r.URL.Path, "err", err)
+			span := trace.SpanFromContext(r.Context())
+			span.RecordError(err)
+			span.SetStatus(codes.Error, "internal error")
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		}
 	}
@@ -282,11 +323,11 @@ func (s *Server) authedAs(w http.ResponseWriter, r *http.Request, u *User, fn au
 	{
 		key := strconv.FormatInt(u.ID, 10)
 		if ok, wait := s.guards.user.allow(key); !ok {
-			return tooMany(w, "You're going a bit fast.", wait)
+			return tooMany(w, r, "user", "You're going a bit fast.", wait)
 		}
 		if !isSafeMethod(r.Method) {
 			if ok, wait := s.guards.write.allow(key); !ok {
-				return tooMany(w, "You're making changes too quickly.", wait)
+				return tooMany(w, r, "write", "You're making changes too quickly.", wait)
 			}
 		}
 		r = r.WithContext(context.WithValue(r.Context(), ctxKey{}, u))

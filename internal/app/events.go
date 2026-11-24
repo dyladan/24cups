@@ -166,7 +166,7 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, u *User) e
 	}
 	sub := s.events.subscribe(u.ID, s.clientIP(r), client)
 	if sub == nil {
-		return tooMany(w, "Too many open live-update connections.", 30*time.Second)
+		return tooMany(w, r, "streams", "Too many open live-update connections.", 30*time.Second)
 	}
 	defer s.events.unsubscribe(sub)
 	rc := http.NewResponseController(w)

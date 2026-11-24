@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/time/rate"
 )
 
@@ -249,7 +250,8 @@ func (g *guards) failDelay(ctx context.Context) {
 }
 
 // tooMany builds a 429 with a human-readable wait.
-func tooMany(w http.ResponseWriter, what string, wait time.Duration) error {
+func tooMany(w http.ResponseWriter, r *http.Request, limiter, what string, wait time.Duration) error {
+	count(r.Context(), mRateLimited, attribute.String("advent.limiter", limiter))
 	secs := int(math.Ceil(wait.Seconds()))
 	if secs < 1 {
 		secs = 1

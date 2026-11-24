@@ -5,11 +5,15 @@
 #
 # Visitors connect to Cloudflare over HTTPS (Cloudflare's edge certificate);
 # cloudflared carries traffic to the app over an outbound, encrypted tunnel.
-# The app has no published ports and no internet access.
+# The app has no published ports; its only route out is the telemetry network
+# to the host's OpenTelemetry collector.
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev} # e.g. VERSION=$(git rev-parse --short HEAD)
     image: advent-cup:latest
     restart: unless-stopped
     environment:
@@ -23,10 +27,23 @@ services:
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-0x4AAAAAAGRV0UPs2N-iBLmI}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
+      # OpenTelemetry (standard OTEL_* variables). Off unless an endpoint is
+      # set in .env, e.g. the host's collector at http://host.docker.internal:4318.
+      OTEL_SERVICE_NAME: advent-cup
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
+      OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta # Dynatrace needs delta
+      OTEL_METRIC_EXPORT_INTERVAL: "60000"
+      OTEL_RESOURCE_ATTRIBUTES: ${OTEL_RESOURCE_ATTRIBUTES:-deployment.environment.name=production}
+      OTEL_TRACES_SAMPLER: parentbased_traceidratio
+      OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
     volumes:
       - advent-data:/data
     networks:
       - internal
+      - telemetry # reaches the host's OTel collector
+    extra_hosts:
+      - host.docker.internal:host-gateway
     read_only: true
     tmpfs:
       - /tmp # SQLite temp space for large sorts
@@ -57,3 +74,6 @@ networks:
   internal:
     internal: true # no route to the internet
   egress:
+  # Route to the host for telemetry. Not internal, so it also allows other
+  # outbound traffic; remove it (and the endpoint) if you don't export telemetry.
+  telemetry:

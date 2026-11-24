@@ -211,6 +211,7 @@ func (s *Server) createBrew(w http.ResponseWriter, r *http.Request, u *User) err
 		return err
 	}
 	id, _ := res.LastInsertId()
+	count(r.Context(), mBrews)
 	s.brewChanged(r, u, in.CoffeeID)
 	list, err := s.queryBrews(r.Context(), u, `b.id = ?`, 1, id)
 	if err != nil {
