@@ -32,15 +32,19 @@ type Stats struct {
 }
 
 type Coffee struct {
-	ID          int64       `json:"id"`
-	Day         int         `json:"day"`
-	Opened      bool        `json:"opened"`
-	OpenedAt    *string     `json:"openedAt"`
-	Favorited   bool        `json:"favorited"`
-	Info        *CoffeeInfo `json:"info"`  // nil until opened (no spoilers)
-	Stats       *Stats      `json:"stats"` // nil until opened unless user reveals
-	MyAvg       *float64    `json:"myAvg"` // 0–5 scale
-	MyBrewCount int         `json:"myBrewCount"`
+	ID        int64       `json:"id"`
+	Day       int         `json:"day"`
+	Opened    bool        `json:"opened"`
+	OpenedAt  *string     `json:"openedAt"`
+	Favorited bool        `json:"favorited"`
+	Info      *CoffeeInfo `json:"info"`  // nil until opened (no spoilers)
+	Stats     *Stats      `json:"stats"` // nil until opened unless spoilerMode is "always"
+	// Revealed is false while tasting notes and community scores are hidden
+	// (opened but not yet rated, in the default "rated" spoiler mode). Info
+	// then has no tasting notes and Stats carries only Opens.
+	Revealed    bool     `json:"revealed"`
+	MyAvg       *float64 `json:"myAvg"` // 0–5 scale
+	MyBrewCount int      `json:"myBrewCount"`
 }
 
 type CoffeeDetail struct {
@@ -126,7 +130,7 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 	q := `
 		SELECT c.id, c.day, c.name, c.origin, c.region, c.producer, c.process, c.variety, c.elevation,
 		       c.roast_level, c.tasting_notes, c.description,
-		       o.opened_at, f.user_id IS NOT NULL,
+		       o.opened_at, COALESCE(o.revealed, 0), f.user_id IS NOT NULL,
 		       (SELECT AVG(rating) FROM brews b WHERE b.coffee_id = c.id AND b.user_id = ? AND b.rating IS NOT NULL),
 		       (SELECT COUNT(*) FROM brews b WHERE b.coffee_id = c.id AND b.user_id = ?)
 		FROM coffees c
@@ -155,9 +159,10 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 		c := &Coffee{}
 		info := &CoffeeInfo{}
 		var myAvg *float64
+		var manual bool
 		if err := rows.Scan(&c.ID, &c.Day, &info.Name, &info.Origin, &info.Region, &info.Producer, &info.Process,
 			&info.Variety, &info.Elevation, &info.RoastLevel, &info.TastingNotes, &info.Description,
-			&c.OpenedAt, &c.Favorited, &myAvg, &c.MyBrewCount); err != nil {
+			&c.OpenedAt, &manual, &c.Favorited, &myAvg, &c.MyBrewCount); err != nil {
 			return nil, err
 		}
 		c.Opened = c.OpenedAt != nil
@@ -165,14 +170,19 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 			v := *myAvg / 2
 			c.MyAvg = &v
 		}
-		if c.Opened {
-			c.Info = info
+		// myAvg is non-nil exactly when the user has a rated brew.
+		c.Revealed = u.isRevealed(c.Opened, myAvg != nil, manual)
+		st := stats[c.ID]
+		if st == nil {
+			st = &Stats{}
 		}
-		if c.Opened || u.RevealUnopened {
-			st := stats[c.ID]
-			if st == nil {
-				st = &Stats{}
-			}
+		switch {
+		case c.Revealed:
+			c.Info, c.Stats = info, st
+		case c.Opened:
+			info.TastingNotes, info.Description = "", ""
+			c.Info, c.Stats = info, &Stats{Opens: st.Opens}
+		case u.statsOnSealedDoors():
 			c.Stats = st
 		}
 		list = append(list, c)
@@ -205,7 +215,7 @@ func (s *Server) getCoffee(w http.ResponseWriter, r *http.Request, u *User) erro
 		return errNotFound
 	}
 	d := &CoffeeDetail{Coffee: *list[0]}
-	if d.Stats != nil {
+	if d.Revealed || (!d.Opened && d.Stats != nil) {
 		d.Distribution = s.stats.distribution(id)
 
 		groups, err := s.rdb.QueryContext(r.Context(), `
@@ -320,6 +330,24 @@ func (s *Server) unfavoriteCoffee(w http.ResponseWriter, r *http.Request, u *Use
 	return noContent(w)
 }
 
+// revealCoffee shows tasting notes and community scores for an opened
+// coffee before the user has rated it.
+func (s *Server) revealCoffee(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	res, err := s.db.ExecContext(r.Context(), `UPDATE coffee_opens SET revealed = 1 WHERE user_id = ? AND coffee_id = ?`, u.ID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errf(409, "open this coffee first")
+	}
+	s.notifyUser(r, u, keyCoffees, keyGroups)
+	return noContent(w)
+}
+
 func (s *Server) hasOpened(ctx context.Context, userID, coffeeID int64) bool {
 	var x int
 	return s.rdb.QueryRowContext(ctx, `SELECT 1 FROM coffee_opens WHERE user_id = ? AND coffee_id = ?`, userID, coffeeID).Scan(&x) == nil
@@ -334,7 +362,7 @@ func (s *Server) coffeeBrews(w http.ResponseWriter, r *http.Request, u *User) er
 		writeJSON(w, 200, []*Brew{})
 		return nil
 	}
-	list, err := s.queryBrews(r.Context(), u, `b.coffee_id = ? AND (b.is_public = 1 OR b.user_id = ?)`, 100, id, u.ID)
+	list, err := s.queryBrews(r.Context(), u, `b.coffee_id = ? AND (b.user_id = ? OR (b.is_public = 1 AND `+u.revealedSQL()+`))`, 100, id, u.ID)
 	if err != nil {
 		return err
 	}

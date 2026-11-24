@@ -1,7 +1,7 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { Eye, Heart, Star } from 'lucide-react'
+import { Eye, EyeOff, Heart, Star } from 'lucide-react'
 import { coffeesQuery, meQuery, type Coffee, type Stats } from '../api'
 import { Blossom, ErrorText, PageHeader, Spinner, TastingNotes } from '../components/ui'
 import { formatRating } from '../lib/format'
@@ -9,6 +9,22 @@ import { formatRating } from '../lib/format'
 export function todayDay(): number | null {
   const d = new Date()
   return d.getMonth() === 11 ? d.getDate() : null
+}
+
+/** Shown instead of scores while a coffee is still blind for this user. */
+export function BlindRow({ stats, className }: { stats: Stats | null; className?: string }) {
+  return (
+    <div className={clsx('flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3', className)}>
+      <span className="inline-flex items-center gap-1" title="Scores hidden until you rate it">
+        <EyeOff size={13} /> Rate to reveal
+      </span>
+      {stats && (
+        <span className="inline-flex items-center gap-1 tabular-nums" title="People who opened this door">
+          <Eye size={13} /> {stats.opens}
+        </span>
+      )}
+    </div>
+  )
 }
 
 export function StatRow({ stats, className }: { stats: Stats; className?: string }) {
@@ -80,9 +96,9 @@ function Door({ c, today }: { c: Coffee; today: boolean }) {
       <div className="min-w-0">
         <p className="eyebrow mb-1 truncate">{info.origin}</p>
         <h3 className="display line-clamp-2 text-xl sm:text-2xl">{info.name}</h3>
-        <TastingNotes notes={info.tastingNotes} className="mt-1.5 line-clamp-6 !text-[0.6rem] !tracking-[0.1em] leading-relaxed" />
+        {c.revealed && <TastingNotes notes={info.tastingNotes} className="mt-1.5 line-clamp-6 !text-[0.6rem] !tracking-[0.1em] leading-relaxed" />}
       </div>
-      {c.stats && <StatRow stats={c.stats} />}
+      {c.revealed ? c.stats && <StatRow stats={c.stats} /> : <BlindRow stats={c.stats} />}
     </Link>
   )
 }

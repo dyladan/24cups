@@ -113,6 +113,7 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/coffees/{id}", s.authed(s.getCoffee))
 	m.HandleFunc("POST /api/coffees/{id}/open", s.authed(s.openCoffee))
 	m.HandleFunc("DELETE /api/coffees/{id}/open", s.authed(s.unopenCoffee))
+	m.HandleFunc("POST /api/coffees/{id}/reveal", s.authed(s.revealCoffee))
 	m.HandleFunc("PUT /api/coffees/{id}/favorite", s.authed(s.favoriteCoffee))
 	m.HandleFunc("DELETE /api/coffees/{id}/favorite", s.authed(s.unfavoriteCoffee))
 	m.HandleFunc("GET /api/coffees/{id}/brews", s.authed(s.coffeeBrews))

@@ -1,7 +1,7 @@
 import { Link, getRouteApi } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ArrowLeft, ChevronLeft, ChevronRight, DoorOpen, Heart, Plus, Undo2 } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, DoorOpen, Eye, EyeOff, Heart, Plus, Undo2 } from 'lucide-react'
 import { api, coffeeBrewsQuery, coffeeKeys, coffeeQuery, coffeesQuery, useApiMutation, type CoffeeDetail } from '../api'
 import { BrewCard } from '../components/BrewCard'
 import { Blossom, Empty, ErrorText, Spinner, Stars, TastingNotes } from '../components/ui'
@@ -26,6 +26,34 @@ function Distribution({ dist }: { dist: number[] }) {
         <span>5★</span>
       </div>
     </div>
+  )
+}
+
+/** Replaces the community panel until the user rates (or reveals) a coffee. */
+function BlindPanel({ c, onReveal, pending }: { c: CoffeeDetail; onReveal: () => void; pending: boolean }) {
+  return (
+    <section className="card p-5">
+      <p className="eyebrow mb-3 flex items-center gap-1.5">
+        <EyeOff size={13} /> Blind tasting
+      </p>
+      <p className="text-sm text-ink-2">
+        Tasting notes, community scores and other people’s brews stay hidden until you log a rated brew, so they don’t sway your
+        own impression.
+      </p>
+      {c.stats && (
+        <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-ink-3 tabular-nums">
+          <Eye size={13} /> {plural(c.stats.opens, 'person has', 'people have')} opened this door
+        </p>
+      )}
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link to="/brews/new" search={{ coffeeId: c.id }} className="btn btn-accent">
+          <Plus size={16} /> Brew &amp; rate
+        </Link>
+        <button className="btn btn-ghost" onClick={onReveal} disabled={pending}>
+          <Eye size={16} /> Reveal now
+        </button>
+      </div>
+    </section>
   )
 }
 
@@ -89,6 +117,7 @@ export function CoffeePage() {
 
   const open = useApiMutation(() => api(`/coffees/${coffeeId}/open`, { method: 'POST' }), coffeeKeys)
   const unopen = useApiMutation(() => api(`/coffees/${coffeeId}/open`, { method: 'DELETE' }), coffeeKeys)
+  const reveal = useApiMutation(() => api(`/coffees/${coffeeId}/reveal`, { method: 'POST' }), coffeeKeys)
   const fav = useApiMutation(
     (on: boolean) => api(`/coffees/${coffeeId}/favorite`, { method: on ? 'PUT' : 'DELETE' }),
     coffeeKeys,
@@ -174,7 +203,13 @@ export function CoffeePage() {
             {info.origin && ` · ${info.origin}`}
           </p>
           <h1 className="display text-5xl sm:text-6xl">{info.name}</h1>
-          <TastingNotes notes={info.tastingNotes} className="mt-4 !text-sm" />
+          {c.revealed ? (
+            <TastingNotes notes={info.tastingNotes} className="mt-4 !text-sm" />
+          ) : (
+            <p className="notes mt-4 inline-flex items-center gap-1.5 !text-ink-3">
+              <EyeOff size={13} /> Tasting notes hidden until you rate it
+            </p>
+          )}
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Link to="/brews/new" search={{ coffeeId: c.id }} className="btn btn-accent">
@@ -224,7 +259,9 @@ export function CoffeePage() {
 
           <section className="mt-10">
             <h2 className="display mb-4 text-2xl">Community brews</h2>
-            {others.length ? (
+            {!c.revealed ? (
+              <Empty>Hidden until you rate this coffee, so other people’s ratings don’t sway yours.</Empty>
+            ) : others.length ? (
               <div className="space-y-3">
                 {others.map((b) => (
                   <BrewCard key={b.id} brew={b} />
@@ -237,13 +274,13 @@ export function CoffeePage() {
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <StatsPanel c={c} />
+          {c.revealed ? <StatsPanel c={c} /> : <BlindPanel c={c} onReveal={() => reveal.mutate()} pending={reveal.isPending} />}
           {c.myBrewCount === 0 && (
             <button className="inline-flex items-center gap-1.5 text-xs text-ink-3 hover:text-ink" onClick={() => unopen.mutate()} disabled={unopen.isPending}>
               <Undo2 size={13} /> Opened by mistake? Close this door
             </button>
           )}
-          <ErrorText error={unopen.error ?? fav.error} />
+          <ErrorText error={unopen.error ?? fav.error ?? reveal.error} />
         </aside>
       </div>
     </>

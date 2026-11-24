@@ -164,6 +164,13 @@ CREATE INDEX group_members_user ON group_members(user_id);
 CREATE INDEX brews_user_coffee ON brews(user_id, coffee_id);
 CREATE INDEX brews_coffee_brewed ON brews(coffee_id, brewed_at);
 `,
+	// v3: spoiler modes replace the reveal_unopened toggle; per-coffee reveal
+	`
+ALTER TABLE users ADD COLUMN spoiler_mode TEXT NOT NULL DEFAULT 'rated';
+UPDATE users SET spoiler_mode = 'always' WHERE reveal_unopened = 1;
+ALTER TABLE users DROP COLUMN reveal_unopened;
+ALTER TABLE coffee_opens ADD COLUMN revealed INTEGER NOT NULL DEFAULT 0;
+`,
 }
 
 func migrate(db *sql.DB) error {

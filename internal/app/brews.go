@@ -91,7 +91,7 @@ func (s *Server) getBrew(w http.ResponseWriter, r *http.Request, u *User) error 
 	if err != nil {
 		return err
 	}
-	list, err := s.queryBrews(r.Context(), u, `b.id = ? AND (b.user_id = ? OR (b.is_public = 1 AND o.user_id IS NOT NULL))`, 1, id, u.ID)
+	list, err := s.queryBrews(r.Context(), u, `b.id = ? AND (b.user_id = ? OR (b.is_public = 1 AND `+u.revealedSQL()+`))`, 1, id, u.ID)
 	if err != nil {
 		return err
 	}

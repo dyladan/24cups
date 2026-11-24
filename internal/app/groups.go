@@ -36,6 +36,7 @@ type GroupCoffee struct {
 	Day      int     `json:"day"`
 	Name     *string `json:"name"`
 	Stats    *Stats  `json:"stats"`
+	Revealed bool    `json:"revealed"` // see Coffee.Revealed
 }
 
 type GroupDetail struct {
@@ -214,28 +215,36 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, u *User) error
 		return err
 	}
 	rows, err = s.rdb.QueryContext(r.Context(), `
-		SELECT c.id, c.day, c.name, o.user_id IS NOT NULL
+		SELECT c.id, c.day, c.name, o.user_id IS NOT NULL, COALESCE(o.revealed, 0),
+		       EXISTS(SELECT 1 FROM brews b WHERE b.user_id = ? AND b.coffee_id = c.id AND b.rating IS NOT NULL)
 		FROM coffees c LEFT JOIN coffee_opens o ON o.coffee_id = c.id AND o.user_id = ?
-		ORDER BY c.day`, u.ID)
+		ORDER BY c.day`, u.ID, u.ID)
 	if err != nil {
 		return err
 	}
 	for rows.Next() {
 		var gc GroupCoffee
 		var name string
-		var opened bool
-		if err := rows.Scan(&gc.CoffeeID, &gc.Day, &name, &opened); err != nil {
+		var opened, manual, rated bool
+		if err := rows.Scan(&gc.CoffeeID, &gc.Day, &name, &opened, &manual, &rated); err != nil {
 			rows.Close()
 			return err
 		}
 		if opened {
 			gc.Name = &name
 		}
-		if opened || u.RevealUnopened {
-			gc.Stats = stats[gc.CoffeeID]
-			if gc.Stats == nil {
-				gc.Stats = &Stats{}
-			}
+		gc.Revealed = u.isRevealed(opened, rated, manual)
+		st := stats[gc.CoffeeID]
+		if st == nil {
+			st = &Stats{}
+		}
+		switch {
+		case gc.Revealed:
+			gc.Stats = st
+		case opened:
+			gc.Stats = &Stats{Opens: st.Opens}
+		case u.statsOnSealedDoors():
+			gc.Stats = st
 		}
 		d.Coffees = append(d.Coffees, gc)
 	}
@@ -243,7 +252,7 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, u *User) error
 
 	// Recent public brews by members, only for coffees the viewer has opened.
 	d.Brews, err = s.queryBrews(r.Context(), u, `
-		b.is_public = 1 AND o.user_id IS NOT NULL
+		b.is_public = 1 AND `+u.revealedSQL()+`
 		AND b.user_id IN (SELECT user_id FROM group_members WHERE group_id = ?)`, 30, id)
 	if err != nil {
 		return err

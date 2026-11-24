@@ -4,8 +4,12 @@ A community app for logging, rating, and comparing the coffees in this year's
 coffee advent calendar. It's independent and **not affiliated with Onyx Coffee
 Lab or Fellow**.
 
-- **Calendar**: one door per day. Unopened doors hide the coffee and, by default,
-  its scores (no spoilers). You can open a door without logging a brew.
+- **Calendar**: one door per day. Unopened doors hide the coffee. You can open
+  a door without logging a brew.
+- **Blind tasting** (default): after opening a coffee, its tasting notes,
+  community scores and other people's brews stay hidden until you log a rated
+  brew or tap "Reveal now". This is enforced by the API, not just the UI. Profile → Spoilers can
+  switch this to "once opened" or "always" (scores even on sealed doors).
 - **Brews**: coffee + recipe (equipment, ratio, temp, target time) + actual time,
   grinder, burrs, grind setting, half-star rating, notes. Brews are public or private.
   Private brews can be excluded from the global ratings.

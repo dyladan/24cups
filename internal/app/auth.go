@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -22,12 +23,15 @@ const (
 )
 
 type User struct {
-	ID             int64  `json:"id"`
-	Username       string `json:"username"`
-	DisplayName    string `json:"displayName"`
-	RevealUnopened bool   `json:"revealUnopened"`
-	TempUnit       string `json:"tempUnit"`
-	CreatedAt      string `json:"createdAt"`
+	ID          int64  `json:"id"`
+	Username    string `json:"username"`
+	DisplayName string `json:"displayName"`
+	// SpoilerMode controls when tasting notes and community scores appear:
+	// "rated" (after you rate a coffee or choose to reveal it), "opened",
+	// or "always" (scores even on unopened doors).
+	SpoilerMode string `json:"spoilerMode"`
+	TempUnit    string `json:"tempUnit"`
+	CreatedAt   string `json:"createdAt"`
 }
 
 var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
@@ -56,11 +60,11 @@ func (s *Server) currentUser(r *http.Request) (*User, error) {
 	}
 	u := &User{}
 	err = s.rdb.QueryRowContext(r.Context(), `
-		SELECT u.id, u.username, u.display_name, u.reveal_unopened, u.temp_unit, u.created_at
+		SELECT u.id, u.username, u.display_name, u.spoiler_mode, u.temp_unit, u.created_at
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ? AND s.expires_at > ?`,
 		hashToken(c.Value), time.Now().Unix(),
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.RevealUnopened, &u.TempUnit, &u.CreatedAt)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.SpoilerMode, &u.TempUnit, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -197,11 +201,30 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request, u *User) error {
 	return nil
 }
 
+// statsOnSealedDoors reports whether u sees scores for unopened coffees.
+func (u *User) statsOnSealedDoors() bool { return u.SpoilerMode == "always" }
+
+// revealedSQL is a SQL condition, over b.coffee_id and the viewer's
+// coffee_opens row aliased o, that is true when u may see other people's
+// ratings and notes for that coffee.
+func (u *User) revealedSQL() string {
+	if u.SpoilerMode != "rated" {
+		return "(o.user_id IS NOT NULL)"
+	}
+	return fmt.Sprintf(`(o.user_id IS NOT NULL AND (o.revealed = 1 OR EXISTS (
+		SELECT 1 FROM brews rb WHERE rb.user_id = %d AND rb.coffee_id = b.coffee_id AND rb.rating IS NOT NULL)))`, u.ID)
+}
+
+// isRevealed applies the same rule in Go.
+func (u *User) isRevealed(opened, rated, manual bool) bool {
+	return opened && (u.SpoilerMode != "rated" || rated || manual)
+}
+
 func (s *Server) writeUser(w http.ResponseWriter, r *http.Request, id int64, status int) error {
 	u := &User{}
 	err := s.rdb.QueryRowContext(r.Context(),
-		`SELECT id, username, display_name, reveal_unopened, temp_unit, created_at FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.RevealUnopened, &u.TempUnit, &u.CreatedAt)
+		`SELECT id, username, display_name, spoiler_mode, temp_unit, created_at FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.SpoilerMode, &u.TempUnit, &u.CreatedAt)
 	if err != nil {
 		return err
 	}
@@ -211,9 +234,9 @@ func (s *Server) writeUser(w http.ResponseWriter, r *http.Request, id int64, sta
 
 func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u *User) error {
 	var in struct {
-		DisplayName    *string `json:"displayName"`
-		RevealUnopened *bool   `json:"revealUnopened"`
-		TempUnit       *string `json:"tempUnit"`
+		DisplayName *string `json:"displayName"`
+		SpoilerMode *string `json:"spoilerMode"`
+		TempUnit    *string `json:"tempUnit"`
 	}
 	if err := readJSON(w, r, &in); err != nil {
 		return err
@@ -228,8 +251,13 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u *User) error
 		}
 		u.DisplayName = d
 	}
-	if in.RevealUnopened != nil {
-		u.RevealUnopened = *in.RevealUnopened
+	if in.SpoilerMode != nil {
+		switch *in.SpoilerMode {
+		case "rated", "opened", "always":
+			u.SpoilerMode = *in.SpoilerMode
+		default:
+			return errf(400, "spoilerMode must be rated, opened or always")
+		}
 	}
 	if in.TempUnit != nil {
 		if *in.TempUnit != "C" && *in.TempUnit != "F" {
@@ -238,8 +266,8 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u *User) error
 		u.TempUnit = *in.TempUnit
 	}
 	if _, err := s.db.ExecContext(r.Context(),
-		`UPDATE users SET display_name = ?, reveal_unopened = ?, temp_unit = ? WHERE id = ?`,
-		u.DisplayName, boolInt(u.RevealUnopened), u.TempUnit, u.ID); err != nil {
+		`UPDATE users SET display_name = ?, spoiler_mode = ?, temp_unit = ? WHERE id = ?`,
+		u.DisplayName, u.SpoilerMode, u.TempUnit, u.ID); err != nil {
 		return err
 	}
 	s.notifyUser(r, u, keyMe, keyCoffees, keyGroups)

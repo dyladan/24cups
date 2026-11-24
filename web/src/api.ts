@@ -2,11 +2,14 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 
 // ---------- types ----------
 
+export type SpoilerMode = 'rated' | 'opened' | 'always'
+
 export interface User {
   id: number
   username: string
   displayName: string
-  revealUnopened: boolean
+  /** When tasting notes and community scores appear. */
+  spoilerMode: SpoilerMode
   tempUnit: 'C' | 'F'
   createdAt: string
 }
@@ -40,6 +43,8 @@ export interface Coffee {
   favorited: boolean
   info: CoffeeInfo | null
   stats: Stats | null
+  /** False while notes and scores are hidden (opened but not yet rated). */
+  revealed: boolean
   myAvg: number | null
   myBrewCount: number
 }
@@ -135,7 +140,7 @@ export interface GroupDetail extends Group {
     opens: number
     brews: number
   }[]
-  coffees: { coffeeId: number; day: number; name: string | null; stats: Stats | null }[]
+  coffees: { coffeeId: number; day: number; name: string | null; stats: Stats | null; revealed: boolean }[]
   brews: Brew[]
 }
 

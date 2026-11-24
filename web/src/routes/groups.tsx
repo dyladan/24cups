@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ArrowLeft, Check, Copy, Globe, Lock, RefreshCw, UserMinus, Users } from 'lucide-react'
-import { api, discoverGroupsQuery, groupQuery, meQuery, myGroupsQuery, useApiMutation, type Group } from '../api'
+import { ArrowLeft, Check, Copy, EyeOff, Globe, Lock, RefreshCw, UserMinus, Users } from 'lucide-react'
+import { api, discoverGroupsQuery, groupQuery, meQuery, myGroupsQuery, useApiMutation, type Group, type GroupDetail } from '../api'
 import { BrewCard } from '../components/BrewCard'
 import { Empty, ErrorText, Field, PageHeader, Spinner, Stars, Toggle } from '../components/ui'
 import { formatRating, plural } from '../lib/format'
@@ -177,9 +177,15 @@ export function GroupPage() {
   if (error) return <ErrorText error={error} />
 
   const isOwner = g.role === 'owner'
+  // Opened but not yet rated by the viewer: scores hidden, listed last.
+  const blind = (c: GroupDetail['coffees'][number]) => c.name != null && !c.revealed
   const ranked = [...g.coffees]
     .filter((c) => c.stats)
-    .sort((a, b) => (sort === 'day' ? a.day - b.day : (b.stats!.avgRating ?? -1) - (a.stats!.avgRating ?? -1) || a.day - b.day))
+    .sort((a, b) =>
+      sort === 'day'
+        ? a.day - b.day
+        : Number(blind(a)) - Number(blind(b)) || (b.stats!.avgRating ?? -1) - (a.stats!.avgRating ?? -1) || a.day - b.day,
+    )
 
   return (
     <>
@@ -239,13 +245,19 @@ export function GroupPage() {
                       <div className="min-w-0 flex-1">
                         <p className={clsx('truncate font-semibold', !c.name && 'text-ink-3')}>{c.name ?? `Day ${c.day} (unopened)`}</p>
                         <p className="text-xs text-ink-3">
-                          Day {c.day} · {c.stats!.opens} opened · {c.stats!.favorites} ♥
+                          Day {c.day} · {c.stats!.opens} opened{!blind(c) && ` · ${c.stats!.favorites} ♥`}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className="font-bold tabular-nums">{formatRating(c.stats!.avgRating)}</p>
-                        <Stars value={c.stats!.avgRating} size={11} />
-                      </div>
+                      {blind(c) ? (
+                        <p className="inline-flex shrink-0 items-center gap-1 text-xs text-ink-3">
+                          <EyeOff size={12} /> Rate to reveal
+                        </p>
+                      ) : (
+                        <div className="text-right">
+                          <p className="font-bold tabular-nums">{formatRating(c.stats!.avgRating)}</p>
+                          <Stars value={c.stats!.avgRating} size={11} />
+                        </div>
+                      )}
                     </Link>
                   </li>
                 ))}

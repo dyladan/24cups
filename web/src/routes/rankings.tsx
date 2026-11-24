@@ -1,17 +1,20 @@
 import { useState } from 'react'
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { Heart } from 'lucide-react'
+import { EyeOff, Heart } from 'lucide-react'
 import { coffeesQuery, type Coffee } from '../api'
 import { Empty, ErrorText, PageHeader, Segmented, Spinner, Stars } from '../components/ui'
 import { formatRating } from '../lib/format'
 
 type SortKey = 'global' | 'mine' | 'favorites' | 'day'
 
+// Coffees still blind for this user (opened, not yet rated) sort last.
+const blindLast = (a: Coffee, b: Coffee) => Number(!a.revealed) - Number(!b.revealed)
+
 const sorters: Record<SortKey, (a: Coffee, b: Coffee) => number> = {
-  global: (a, b) => (b.stats?.avgRating ?? -1) - (a.stats?.avgRating ?? -1) || a.day - b.day,
+  global: (a, b) => blindLast(a, b) || (b.stats?.avgRating ?? -1) - (a.stats?.avgRating ?? -1) || a.day - b.day,
   mine: (a, b) => (b.myAvg ?? -1) - (a.myAvg ?? -1) || a.day - b.day,
-  favorites: (a, b) => (b.stats?.favorites ?? 0) - (a.stats?.favorites ?? 0) || a.day - b.day,
+  favorites: (a, b) => blindLast(a, b) || (b.stats?.favorites ?? 0) - (a.stats?.favorites ?? 0) || a.day - b.day,
   day: (a, b) => a.day - b.day,
 }
 
@@ -63,11 +66,19 @@ export function RankingsPage() {
                 </div>
                 <div className="hidden w-16 text-right sm:block">
                   <p className="eyebrow">Favs</p>
-                  <p className="text-sm font-semibold tabular-nums">{c.stats?.favorites ?? 0}</p>
+                  <p className="text-sm font-semibold tabular-nums">{c.revealed ? (c.stats?.favorites ?? 0) : '—'}</p>
                 </div>
                 <div className="w-24 text-right">
-                  <p className="text-lg font-bold tabular-nums">{formatRating(sort === 'mine' ? c.myAvg : c.stats?.avgRating)}</p>
-                  <Stars value={sort === 'mine' ? c.myAvg : c.stats?.avgRating} size={12} />
+                  {sort !== 'mine' && !c.revealed ? (
+                    <p className="inline-flex items-center gap-1 text-xs text-ink-3">
+                      <EyeOff size={12} /> Rate to reveal
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-lg font-bold tabular-nums">{formatRating(sort === 'mine' ? c.myAvg : c.stats?.avgRating)}</p>
+                      <Stars value={sort === 'mine' ? c.myAvg : c.stats?.avgRating} size={12} />
+                    </>
+                  )}
                 </div>
               </Link>
             </li>

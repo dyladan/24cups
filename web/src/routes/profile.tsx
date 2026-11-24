@@ -10,9 +10,10 @@ import {
   useApiMutation,
   type Grinder,
   type Recipe,
+  type SpoilerMode,
   type User,
 } from '../api'
-import { ErrorText, Field, PageHeader, RatioInput, Segmented, Spinner, SuggestInput, TempInput, TimeInput, Toggle } from '../components/ui'
+import { ErrorText, Field, PageHeader, RatioInput, Segmented, Spinner, SuggestInput, TempInput, TimeInput } from '../components/ui'
 import { formatRatio, formatTemp, formatTime } from '../lib/format'
 import { useThemePref, type ThemePref } from '../lib/theme'
 
@@ -75,12 +76,28 @@ function Settings({ me }: { me: User }) {
           ]}
         />
       </div>
-      <Toggle
-        checked={me.revealUnopened}
-        onChange={(revealUnopened) => patch({ revealUnopened })}
-        label="Show scores for unopened coffees"
-        hint="Shows ratings, opens and favorites on sealed doors. The coffee itself stays hidden until you open it."
-      />
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="label mb-0">Spoilers</span>
+          <Segmented<SpoilerMode>
+            label="Spoilers"
+            value={me.spoilerMode}
+            onChange={(spoilerMode) => patch({ spoilerMode })}
+            options={[
+              { value: 'rated', label: 'Until I rate' },
+              { value: 'opened', label: 'Once opened' },
+              { value: 'always', label: 'Always' },
+            ]}
+          />
+        </div>
+        <p className="mt-1.5 text-xs text-ink-3">
+          {me.spoilerMode === 'rated'
+            ? 'Blind tasting: tasting notes, community scores and other people’s brews stay hidden until you log a rated brew (or tap Reveal).'
+            : me.spoilerMode === 'opened'
+              ? 'Tasting notes and community scores appear as soon as you open a door.'
+              : 'Also shows community scores on sealed doors. The coffee itself stays hidden until you open it.'}
+        </p>
+      </div>
       <ErrorText error={update.error} />
       <details className="border-t border-line pt-4">
         <summary className="cursor-pointer text-sm font-semibold">Change password</summary>
