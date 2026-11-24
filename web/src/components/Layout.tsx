@@ -36,7 +36,7 @@ export function Layout() {
 
   return (
     <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-30 border-b border-line bg-paper/85 backdrop-blur-md pt-[env(safe-area-inset-top)]">
+      <header className="gold-rule sticky top-0 z-30 bg-paper/85 backdrop-blur-md pt-[env(safe-area-inset-top)]">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
           <Logo />
           {me && (
@@ -46,7 +46,7 @@ export function Layout() {
                   key={n.to}
                   to={n.to}
                   activeOptions={{ exact: n.to === '/' }}
-                  className="rounded-full px-3.5 py-2 text-sm font-semibold text-ink-2 transition hover:text-ink data-[status=active]:bg-ink data-[status=active]:text-paper"
+                  className="rounded-full px-3.5 py-2 text-sm font-semibold text-ink-2 transition hover:text-ink data-[status=active]:bg-heading data-[status=active]:text-paper"
                 >
                   {n.label}
                 </Link>
@@ -63,7 +63,7 @@ export function Layout() {
         <Outlet />
       </main>
 
-      <footer className="border-t border-line pb-24 md:pb-0">
+      <footer className="border-t border-gold/40 pb-24 md:pb-0">
         <div className="mx-auto max-w-6xl px-4 py-6 text-xs leading-relaxed text-ink-3 sm:px-6">
           Advent Cup is an independent, community-run project for comparing notes on this year’s coffee advent calendar.
           It is not affiliated with, endorsed by, or sponsored by Onyx Coffee Lab or Fellow. All trademarks belong to
@@ -72,7 +72,7 @@ export function Layout() {
       </footer>
 
       {me && (
-        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-gold/40 bg-paper/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
           <div className="mx-auto grid max-w-md grid-cols-5">
             {nav.map((n) => (
               <Link

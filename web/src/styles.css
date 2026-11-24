@@ -3,36 +3,44 @@
 @import '@fontsource-variable/archivo/wdth.css';
 
 /*
- * Palette: warm paper + near-black ink with a single ember accent, in the
- * spirit of minimalist specialty-coffee packaging. Tweak the variables below
- * to retheme everything.
+ * Palette taken from the 2026 calendar packaging: crimson box, gold foil,
+ * cream lineup card with deep-burgundy type, and the black puzzle box for
+ * dark mode. Gold text tokens are tuned for WCAG AA contrast.
  */
 :root {
-  --paper: #f3efe6;
-  --paper-2: #ebe5d8;
-  --card: #fbf9f4;
-  --ink: #141414;
-  --ink-2: #57534b;
-  --ink-3: #8b857a;
-  --line: #d9d2c3;
-  --accent: #d9481c;
-  --accent-ink: #ffffff;
-  --gold: #c99a2e;
+  --paper: #f4eee3;
+  --paper-2: #ebe2d2;
+  --card: #fbf8f2;
+  --ink: #3a171c;
+  --ink-2: #5f4442;
+  --ink-3: #7a6460;
+  --line: #e0d3bf;
+  --heading: #5c1a27;
+  --accent: #b01c33;
+  --accent-ink: #fff7e8;
+  --gold: #b8892e; /* stars, rules, decoration */
+  --gold-text: #8a6420; /* small gold text */
+  --door: #a8192f;
+  --door-ink: #ecd08a;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #121110;
-    --paper-2: #1b1a18;
-    --card: #1e1c1a;
-    --ink: #f1ede4;
-    --ink-2: #b9b2a5;
-    --ink-3: #847d71;
-    --line: #34312c;
-    --accent: #ef6a3c;
-    --accent-ink: #121110;
-    --gold: #e0b44a;
+    --paper: #141110;
+    --paper-2: #1e1a18;
+    --card: #1c1817;
+    --ink: #f1e8da;
+    --ink-2: #c3b6a5;
+    --ink-3: #8d8173;
+    --line: #362e2a;
+    --heading: #f1e8da;
+    --accent: #c42840;
+    --accent-ink: #ffffff;
+    --gold: #d9b96f;
+    --gold-text: #d9b96f;
+    --door: #8e1428;
+    --door-ink: #ecd08a;
     color-scheme: dark;
   }
 }
@@ -48,6 +56,10 @@
   --color-accent: var(--accent);
   --color-accent-ink: var(--accent-ink);
   --color-gold: var(--gold);
+  --color-gold-text: var(--gold-text);
+  --color-heading: var(--heading);
+  --color-door: var(--door);
+  --color-door-ink: var(--door-ink);
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
   --font-display: 'Archivo Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
 }
@@ -73,9 +85,10 @@
     text-transform: uppercase;
     letter-spacing: -0.01em;
     line-height: 0.95;
+    color: var(--heading);
   }
   .eyebrow {
-    @apply text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-ink-3;
+    @apply text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-gold-text;
   }
   .card {
     @apply rounded-2xl border border-line bg-card;
@@ -85,7 +98,7 @@
       transition active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none whitespace-nowrap;
   }
   .btn-primary {
-    @apply bg-ink text-paper hover:opacity-90;
+    @apply bg-heading text-paper hover:opacity-90;
   }
   .btn-accent {
     @apply bg-accent text-accent-ink hover:opacity-90;
@@ -113,8 +126,18 @@
     @apply rounded-full px-3 py-1.5 text-xs font-semibold text-ink-2 transition;
   }
   .seg > button[aria-pressed='true'] {
-    @apply bg-ink text-paper;
+    @apply bg-heading text-paper;
   }
+}
+
+/* Tasting notes, set like the lineup card: gold, tracked caps, bar-separated */
+.notes {
+  @apply text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-gold-text;
+}
+
+/* Thin gold double rule, as on the puzzle box */
+.gold-rule {
+  border-bottom: 3px double var(--gold);
 }
 
 /* Door-opening flourish on the calendar */

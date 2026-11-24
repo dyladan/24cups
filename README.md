@@ -56,4 +56,4 @@ The checked-in file has the 2026 lineup, transcribed from the printed card. Days
 
 ## Theming
 
-Colors live in CSS variables at the top of `web/src/styles.css` (light and dark).
+Colors live in CSS variables at the top of `web/src/styles.css`. The light theme follows the 2026 box and lineup card (crimson, gold foil, cream, burgundy); dark mode follows the black puzzle box. Brand marks (the blackletter wordmark and the horse artwork) are deliberately not reproduced.

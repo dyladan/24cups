@@ -4,7 +4,7 @@ import clsx from 'clsx'
 import { ArrowLeft, ChevronLeft, ChevronRight, DoorOpen, Heart, Plus, Undo2 } from 'lucide-react'
 import { api, coffeeBrewsQuery, coffeeKeys, coffeeQuery, coffeesQuery, useApiMutation, type CoffeeDetail } from '../api'
 import { BrewCard } from '../components/BrewCard'
-import { Empty, ErrorText, Spinner, Stars } from '../components/ui'
+import { Blossom, Empty, ErrorText, Spinner, Stars, TastingNotes } from '../components/ui'
 import { formatRating, plural } from '../lib/format'
 import { StatRow } from './calendar'
 
@@ -16,7 +16,7 @@ function Distribution({ dist }: { dist: number[] }) {
     <div>
       <div className="flex h-24 items-end gap-1" aria-label="Rating distribution">
         {dist.map((n, i) => (
-          <div key={i} className="flex flex-1 flex-col items-center justify-end" title={`${(i + 1) / 2}★: ${n}`}>
+          <div key={i} className="flex h-full flex-1 flex-col items-center justify-end" title={`${(i + 1) / 2}★: ${n}`}>
             <div className={clsx('w-full rounded-t-sm', n ? 'bg-gold' : 'bg-line')} style={{ height: `${Math.max(4, (n / max) * 100)}%` }} />
           </div>
         ))}
@@ -128,10 +128,11 @@ export function CoffeePage() {
       <>
         {nav}
         <div className="mx-auto max-w-md text-center">
-          <div className="relative mx-auto flex aspect-[4/5] w-56 flex-col items-center justify-center rounded-3xl bg-ink text-paper shadow-xl">
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] opacity-60">Day</span>
-            <span className="display text-[7rem]">{String(c.day).padStart(2, '0')}</span>
-            <span className="absolute inset-y-4 right-3 border-r border-dashed border-current opacity-20" />
+          <div className="relative mx-auto flex aspect-[4/5] w-56 flex-col items-center justify-center rounded-3xl bg-door text-door-ink shadow-xl">
+            <span className="pointer-events-none absolute inset-3 rounded-2xl border border-door-ink/25" />
+            <Blossom size={22} className="mb-2 opacity-70" />
+            <span className="text-xs font-semibold uppercase tracking-[0.3em] opacity-80">Day</span>
+            <span className="display !text-door-ink text-[7rem]">{String(c.day).padStart(2, '0')}</span>
           </div>
           <h1 className="display mt-8 text-3xl">Still sealed</h1>
           <p className="mt-2 text-ink-2">Opening reveals the coffee, its community scores and everyone’s brews. You don’t have to log a brew to open it.</p>
@@ -168,9 +169,12 @@ export function CoffeePage() {
       {nav}
       <div className="grid gap-6 lg:grid-cols-[1fr_340px] lg:gap-10">
         <div className="min-w-0">
-          <p className="eyebrow mb-2">Day {c.day}</p>
+          <p className="eyebrow mb-2">
+            Day {c.day}
+            {info.origin && ` · ${info.origin}`}
+          </p>
           <h1 className="display text-5xl sm:text-6xl">{info.name}</h1>
-          {info.tastingNotes && <p className="mt-3 text-lg text-ink-2">{info.tastingNotes}</p>}
+          <TastingNotes notes={info.tastingNotes} className="mt-4 !text-sm" />
 
           <div className="mt-5 flex flex-wrap gap-2">
             <Link to="/brews/new" search={{ coffeeId: c.id }} className="btn btn-accent">

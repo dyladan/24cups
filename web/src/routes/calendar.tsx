@@ -1,9 +1,9 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { DoorClosed, Eye, Heart, Star } from 'lucide-react'
+import { Eye, Heart, Star } from 'lucide-react'
 import { coffeesQuery, meQuery, type Coffee, type Stats } from '../api'
-import { ErrorText, PageHeader, Spinner } from '../components/ui'
+import { Blossom, ErrorText, PageHeader, Spinner, TastingNotes } from '../components/ui'
 import { formatRating } from '../lib/format'
 
 export function todayDay(): number | null {
@@ -36,22 +36,22 @@ function Door({ c, today }: { c: Coffee; today: boolean }) {
         to="/coffee/$coffeeId"
         params={{ coffeeId: c.id }}
         className={clsx(
-          'group relative flex aspect-[4/5] flex-col justify-between overflow-hidden rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:shadow-lg sm:aspect-square',
-          today ? 'border-accent bg-accent text-accent-ink' : 'border-ink bg-ink text-paper',
+          'group relative flex aspect-[4/5] flex-col justify-between overflow-hidden rounded-2xl p-4 text-door-ink transition hover:-translate-y-0.5 hover:shadow-lg sm:aspect-square xl:aspect-[4/5]',
+          today ? 'bg-[#141110] ring-2 ring-door-ink/70' : 'bg-door',
         )}
       >
-        <div className="flex items-start justify-between">
-          <span className="text-[0.65rem] font-semibold uppercase tracking-[0.18em] opacity-60">{today ? 'Today' : 'Day'}</span>
-          <DoorClosed size={18} className="opacity-50 transition group-hover:opacity-100" />
+        {/* foil frame */}
+        <span className="pointer-events-none absolute inset-2 rounded-xl border border-door-ink/25" />
+        <div className="relative flex items-start justify-between">
+          <span className="text-[0.62rem] font-semibold uppercase tracking-[0.3em] opacity-80">{today ? 'Today' : 'Day'}</span>
+          <Blossom size={18} className="opacity-60 transition group-hover:rotate-45 group-hover:opacity-100" />
         </div>
-        <span className="display text-7xl sm:text-8xl">{String(c.day).padStart(2, '0')}</span>
+        <span className="display relative !text-door-ink text-7xl sm:text-8xl">{String(c.day).padStart(2, '0')}</span>
         {c.stats ? (
-          <StatRow stats={c.stats} className="!text-current opacity-80 [&_*]:!text-current" />
+          <StatRow stats={c.stats} className="relative !text-door-ink [&_*]:!text-door-ink" />
         ) : (
-          <span className="text-xs font-medium opacity-60 transition group-hover:opacity-100">Open door →</span>
+          <span className="relative text-[0.65rem] font-semibold uppercase tracking-[0.2em] opacity-70 transition group-hover:opacity-100">Open door →</span>
         )}
-        {/* little "perforation" detail along the door edge */}
-        <span className="pointer-events-none absolute inset-y-3 right-2 border-r border-dashed border-current opacity-20" />
       </Link>
     )
   }
@@ -61,26 +61,26 @@ function Door({ c, today }: { c: Coffee; today: boolean }) {
       to="/coffee/$coffeeId"
       params={{ coffeeId: c.id }}
       className={clsx(
-        'card door-pop group flex aspect-[4/5] flex-col justify-between p-4 transition hover:-translate-y-0.5 hover:border-ink hover:shadow-lg sm:aspect-square',
-        today && 'ring-2 ring-accent',
+        'card door-pop group relative flex aspect-[4/5] flex-col justify-between overflow-hidden p-4 transition hover:-translate-y-0.5 hover:border-gold hover:shadow-lg sm:aspect-square xl:aspect-[4/5]',
+        today && 'ring-2 ring-gold',
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="display text-3xl text-ink-3">{String(c.day).padStart(2, '0')}</span>
-        {c.favorited && <Heart size={18} className="text-accent" fill="currentColor" />}
-      </div>
-      <div className="min-w-0">
-        <h3 className="display line-clamp-2 text-xl sm:text-2xl">{info.name}</h3>
-        <p className="mt-1 truncate text-xs text-ink-2">{[info.origin, info.process].filter(Boolean).join(' · ') || ' '}</p>
-        <div className="mt-2 flex flex-wrap gap-1">
-          {info.roastLevel && <span className="chip">{info.roastLevel}</span>}
+        <span className="display !text-gold text-3xl">{String(c.day).padStart(2, '0')}</span>
+        <span className="flex items-center gap-1.5">
           {c.myAvg != null && (
-            <span className="chip border-gold/60">
-              You {formatRating(c.myAvg)}
+            <span className="chip border-gold/60 !px-2 tabular-nums" title="Your average">
+              {formatRating(c.myAvg)}
               <Star size={10} className="text-gold" fill="currentColor" strokeWidth={0} />
             </span>
           )}
-        </div>
+          {c.favorited && <Heart size={16} className="text-accent" fill="currentColor" />}
+        </span>
+      </div>
+      <div className="min-w-0">
+        <p className="eyebrow mb-1 truncate">{info.origin}</p>
+        <h3 className="display line-clamp-2 text-xl sm:text-2xl">{info.name}</h3>
+        <TastingNotes notes={info.tastingNotes} className="mt-1.5 line-clamp-2 !text-[0.6rem] !tracking-[0.1em] leading-relaxed" />
       </div>
       {c.stats && <StatRow stats={c.stats} />}
     </Link>
@@ -96,13 +96,13 @@ export function CalendarPage() {
   const opened = data.filter((c) => c.opened).length
   return (
     <>
-      <PageHeader eyebrow={`Hi ${me?.displayName ?? ''} · ${opened} of ${data.length} opened`} title="The Calendar">
+      <PageHeader eyebrow={`Hi ${me?.displayName ?? ''} · ${opened} of ${data.length} opened`} title="Explore the lineup">
         <Link to="/brews/new" className="btn btn-accent">
           Log a brew
         </Link>
       </PageHeader>
       <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-paper-2">
-        <div className="h-full rounded-full bg-accent transition-all" style={{ width: `${(opened / Math.max(1, data.length)) * 100}%` }} />
+        <div className="h-full rounded-full bg-gold transition-all" style={{ width: `${(opened / Math.max(1, data.length)) * 100}%` }} />
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-6">
         {data.map((c) => (

@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, type User } from '../api'
-import { ErrorText, Field } from '../components/ui'
+import { Blossom, ErrorText, Field } from '../components/ui'
 
 const loginApi = getRouteApi('/login')
 const registerApi = getRouteApi('/register')
@@ -10,12 +10,12 @@ const registerApi = getRouteApi('/register')
 function AuthShell({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="mx-auto grid max-w-4xl items-center gap-10 py-4 md:grid-cols-2 md:py-12">
-      <div>
-        <p className="eyebrow mb-3">24 doors · 24 coffees</p>
-        <h1 className="display text-5xl sm:text-6xl">
-          Rate the <span className="text-accent">calendar</span>, one door at a time.
-        </h1>
-        <p className="mt-5 max-w-sm text-ink-2">
+      <div className="relative overflow-hidden rounded-3xl bg-door p-8 text-door-ink sm:p-10">
+        <span className="pointer-events-none absolute inset-3 rounded-2xl border border-door-ink/25" />
+        <Blossom size={150} className="pointer-events-none absolute -right-8 -bottom-8 opacity-10" />
+        <p className="relative mb-4 text-[0.68rem] font-semibold uppercase tracking-[0.3em] opacity-80">24 doors · 24 coffees</p>
+        <h1 className="display relative !text-door-ink text-5xl sm:text-6xl">Rate the calendar, one door at a time.</h1>
+        <p className="relative mt-5 max-w-sm text-[#f6e9d8]">
           Log every brew, dial in with your group, and see how the community scores each coffee — without spoiling the doors you
           haven’t opened yet.
         </p>

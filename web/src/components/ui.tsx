@@ -78,7 +78,7 @@ export function Toggle({ checked, onChange, label, hint, disabled }: { checked: 
         onClick={() => onChange(!checked)}
         className={clsx(
           'relative mt-0.5 inline-flex h-6 w-10 shrink-0 rounded-full transition',
-          checked ? 'bg-ink' : 'bg-line',
+          checked ? 'bg-heading' : 'bg-line',
         )}
       >
         <span className={clsx('absolute top-0.5 size-5 rounded-full bg-paper shadow transition-all', checked ? 'left-[1.125rem]' : 'left-0.5')} />
@@ -333,5 +333,35 @@ export function SuggestInput({ id, value, onChange, options, placeholder, requir
         ))}
       </datalist>
     </>
+  )
+}
+
+// ---------- brand bits ----------
+
+/** Tasting notes like the lineup card: gold tracked caps separated by bars. */
+export function TastingNotes({ notes, className }: { notes: string; className?: string }) {
+  const list = notes.split(',').map((n) => n.trim()).filter(Boolean)
+  if (!list.length) return null
+  return (
+    <p className={clsx('notes', className)}>
+      {list.map((n, i) => (
+        <span key={n}>
+          {i > 0 && <span className="opacity-50"> | </span>}
+          {n}
+        </span>
+      ))}
+    </p>
+  )
+}
+
+/** Five-petal coffee blossom used as a small decorative mark. */
+export function Blossom({ size = 16, className }: { size?: number; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} className={className} aria-hidden="true" fill="currentColor">
+      {[0, 72, 144, 216, 288].map((r) => (
+        <path key={r} d="M12 12 C10.2 8.5 10.6 4.2 12 1.5 C13.4 4.2 13.8 8.5 12 12Z" transform={`rotate(${r} 12 12)`} />
+      ))}
+      <circle cx="12" cy="12" r="1.6" fill="var(--paper)" />
+    </svg>
   )
 }
