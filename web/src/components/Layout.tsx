@@ -29,7 +29,8 @@ export function Layout() {
 
   async function logout() {
     await api('/auth/logout', { method: 'POST' })
-    qc.clear()
+    qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' })
+    qc.setQueryData(['me'], null)
     navigate({ to: '/login' })
   }
 

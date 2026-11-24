@@ -38,7 +38,9 @@ function useAuthSubmit(path: string, redirectTo?: string) {
     setError(null)
     try {
       const user = await api<User>(path, { method: 'POST', json: body })
-      qc.clear()
+      // Drop the previous account's data but keep the ['me'] query itself:
+      // qc.clear() would orphan the header's observer, hiding the nav until a reload.
+      qc.removeQueries({ predicate: (q) => q.queryKey[0] !== 'me' })
       qc.setQueryData(['me'], user)
       // Only follow same-origin relative redirects.
       const to = redirectTo && redirectTo.startsWith('/') && !redirectTo.startsWith('//') ? redirectTo : '/'
