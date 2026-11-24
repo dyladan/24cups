@@ -5,8 +5,8 @@
 #
 # Visitors connect to Cloudflare over HTTPS (Cloudflare's edge certificate);
 # cloudflared carries traffic to the app over an outbound, encrypted tunnel.
-# The app has no published ports; its only route out is the telemetry network
-# to the host's OpenTelemetry collector.
+# The app has no published ports. Its "outbound" network lets it call
+# Cloudflare Siteverify (sign-up bot check) and the host's OTel collector.
 
 services:
   app:
@@ -41,7 +41,7 @@ services:
       - advent-data:/data
     networks:
       - internal
-      - telemetry # reaches the host's OTel collector
+      - outbound # Cloudflare Siteverify + the host's OTel collector
     extra_hosts:
       - host.docker.internal:host-gateway
     read_only: true
@@ -74,6 +74,8 @@ networks:
   internal:
     internal: true # no route to the internet
   egress:
-  # Route to the host for telemetry. Not internal, so it also allows other
-  # outbound traffic; remove it (and the endpoint) if you don't export telemetry.
-  telemetry:
+  # Outbound access for the app. Required with Turnstile: without it the app
+  # can't reach challenges.cloudflare.com and every sign-up is rejected (the
+  # app logs "turnstile check failed" at startup). Also reaches the host's
+  # OTel collector via host.docker.internal.
+  outbound:

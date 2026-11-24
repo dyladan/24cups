@@ -145,6 +145,17 @@ func main() {
 		MaxHeaderBytes:    32 << 10,
 	}
 	srv.RegisterOnShutdown(handler.CloseStreams)
+	// Fail loudly in the logs (not by refusing to start) if sign-up's bot
+	// check can't work: Cloudflare unreachable or the secret rejected.
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := handler.CheckTurnstile(ctx); err != nil {
+			slog.Error("turnstile check failed", "err", err)
+		} else if os.Getenv("TURNSTILE_SECRET_KEY") != "" {
+			slog.Info("turnstile check passed: Siteverify reachable and secret accepted")
+		}
+	}()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go handler.Run(ctx)

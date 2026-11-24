@@ -1,7 +1,10 @@
 package app
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"log/slog"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -32,8 +35,10 @@ func (f *fakeSiteverify) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tok := r.PostForm.Get("response")
-	res := map[string]any{"success": false}
-	if r.PostForm.Get("secret") == "real-secret" && !f.used[tok] {
+	res := map[string]any{"success": false, "error-codes": []string{"invalid-input-response"}}
+	if r.PostForm.Get("secret") != "real-secret" {
+		res["error-codes"] = []string{"invalid-input-secret"}
+	} else if !f.used[tok] && strings.Contains(tok, "@") {
 		f.used[tok] = true
 		// token format in tests: "<action>@<hostname>"
 		if a, h, ok := strings.Cut(tok, "@"); ok {
@@ -137,5 +142,40 @@ func TestTurnstileConfigValidation(t *testing.T) {
 	}
 	if s := signup(c, "plain-user", ""); s != 201 {
 		t.Errorf("signup with Turnstile off: %d", s)
+	}
+}
+
+func TestTurnstileStartupCheck(t *testing.T) {
+	srv, _ := setupTurnstile(t, TurnstileConfig{SiteKey: "k", Secret: "real-secret", Hostnames: []string{"a.example"}})
+	if err := srv.Config.Handler.(*Server).CheckTurnstile(context.Background()); err != nil {
+		t.Errorf("healthy config: %v", err)
+	}
+	srv, _ = setupTurnstile(t, TurnstileConfig{SiteKey: "k", Secret: "wrong-secret", Hostnames: []string{"a.example"}})
+	if err := srv.Config.Handler.(*Server).CheckTurnstile(context.Background()); err == nil || !strings.Contains(err.Error(), "rejected TURNSTILE_SECRET_KEY") {
+		t.Errorf("wrong secret: %v", err)
+	}
+	// The original production bug: no route to Cloudflare from the container.
+	srv, _ = setupTurnstile(t, TurnstileConfig{SiteKey: "k", Secret: "real-secret", Hostnames: []string{"a.example"}, VerifyURL: "http://127.0.0.1:1/x"})
+	if err := srv.Config.Handler.(*Server).CheckTurnstile(context.Background()); err == nil || !strings.Contains(err.Error(), "can't reach Cloudflare Siteverify") {
+		t.Errorf("unreachable: %v", err)
+	}
+}
+
+func TestTurnstileRejectionIsLoggedWithReason(t *testing.T) {
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	srv, _ := setupTurnstile(t, TurnstileConfig{SiteKey: "k", Secret: "real-secret", Hostnames: []string{"advent.example.com"}})
+	signup(newClient(t, srv), "wronghost", "signup@evil.example.net")
+	out := buf.String()
+	for _, want := range []string{"turnstile rejected sign-up", "reason=hostname_mismatch", "hostname=evil.example.net"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("log missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "real-secret") || strings.Contains(out, "signup@evil") {
+		t.Errorf("log leaked the secret or token:\n%s", out)
 	}
 }

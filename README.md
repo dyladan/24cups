@@ -131,10 +131,11 @@ embedded in a single static binary.
 
 ## Deploying (Cloudflare Tunnel)
 
-`compose.yaml` runs the app plus `cloudflared`. The app publishes no ports
-and has no internet access. Only cloudflared reaches it, over a private
-Docker network, so it can trust Cloudflare's `CF-Connecting-IP` header for
-rate limiting.
+`compose.yaml` runs the app plus `cloudflared`. The app publishes no ports;
+only cloudflared reaches it, over a private Docker network, so it can trust
+Cloudflare's `CF-Connecting-IP` header for rate limiting. Its separate
+`outbound` network is for calls the app makes: Cloudflare Siteverify and the
+OTel collector.
 
 1. **Create a tunnel.** In the Cloudflare dashboard, go to Zero Trust → Networks →
    Tunnels → Create a tunnel (Cloudflared). Copy the token from the install
@@ -154,6 +155,13 @@ rate limiting.
    Siteverify: it must pass, be for action `signup`, come from an allowed
    hostname, and not be reused. Any failure or timeout rejects the sign-up.
    Without a secret, sign-up has no bot check (fine for local development).
+   The app needs outbound access to `challenges.cloudflare.com` (the
+   `outbound` network in compose). At startup it checks this, and that the
+   secret is accepted, logging `turnstile check passed` or `turnstile check
+   failed: …`. Each rejected sign-up logs `turnstile rejected sign-up` with a
+   reason (`unreachable`, `not_success` plus Cloudflare's error codes,
+   `hostname_mismatch`, `action_mismatch`, …), also recorded on the span and
+   in `advent.turnstile.verifications`.
 5. **Recommended Cloudflare settings** (SSL/TLS → Edge Certificates): Always
    Use HTTPS on, minimum TLS 1.2, and HSTS once you've confirmed HTTPS works.
 

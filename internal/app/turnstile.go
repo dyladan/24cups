@@ -10,7 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"log/slog"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Cloudflare Turnstile on sign-up. The browser renders the widget and sends
@@ -58,55 +62,108 @@ func ParseHostnames(s string) []string {
 // Outbound Siteverify calls get client spans (child of the sign-up request).
 var siteverifyClient = &http.Client{Timeout: 10 * time.Second, Transport: otelhttp.NewTransport(http.DefaultTransport)}
 
-// verifyTurnstile checks a token for the given action. Any failure,
-// including network errors and non-200 responses, is a rejection.
-func (s *Server) verifyTurnstile(r *http.Request, token, action string) (err error) {
-	defer func() {
-		result := "success"
-		if err != nil {
-			result = "rejected"
-		}
-		count(r.Context(), mTurnstile, outcome(result))
-	}()
+type siteverifyResult struct {
+	Success    bool     `json:"success"`
+	Action     string   `json:"action"`
+	Hostname   string   `json:"hostname"`
+	ErrorCodes []string `json:"error-codes"`
+}
+
+// siteverify asks Cloudflare about a token. A non-nil error means no usable
+// answer (network failure, non-200, unparseable body); reason names which.
+func (s *Server) siteverify(ctx context.Context, token, remoteIP string) (res siteverifyResult, reason string, err error) {
 	t := s.turnstile
-	reject := errf(http.StatusForbidden, "The bot check failed. Please try again.")
-	if len(token) == 0 || len(token) > 2048 || len(t.Hostnames) == 0 {
-		return reject
-	}
-	form := url.Values{
-		"secret":   {t.Secret},
-		"response": {token},
-		"remoteip": {s.rawClientIP(r)},
+	form := url.Values{"secret": {t.Secret}, "response": {token}}
+	if remoteIP != "" {
+		form.Set("remoteip", remoteIP)
 	}
 	endpoint := t.VerifyURL
 	if endpoint == "" {
 		endpoint = siteverifyURL
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return reject
+		return res, "request", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	res, err := siteverifyClient.Do(req)
+	resp, err := siteverifyClient.Do(req)
 	if err != nil {
-		return reject
+		return res, "unreachable", err
 	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return reject
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return res, fmt.Sprintf("siteverify_http_%d", resp.StatusCode), fmt.Errorf("siteverify returned HTTP %d", resp.StatusCode)
 	}
-	var out struct {
-		Success  bool   `json:"success"`
-		Action   string `json:"action"`
-		Hostname string `json:"hostname"`
+	if err := json.NewDecoder(http.MaxBytesReader(nil, resp.Body, 64<<10)).Decode(&res); err != nil {
+		return res, "bad_response", err
 	}
-	if err := json.NewDecoder(http.MaxBytesReader(nil, res.Body, 64<<10)).Decode(&out); err != nil {
-		return reject
+	return res, "", nil
+}
+
+// verifyTurnstile checks a token for the given action. Any failure,
+// including network errors and non-200 responses, is a rejection. The
+// reason is logged, recorded on the span and counted (never the token or
+// secret) so failed sign-ups can be diagnosed.
+func (s *Server) verifyTurnstile(r *http.Request, token, action string) error {
+	t := s.turnstile
+	res, reason, err := s.checkToken(r, token, action)
+	span := trace.SpanFromContext(r.Context())
+	if reason == "" {
+		count(r.Context(), mTurnstile, outcome("success"))
+		span.SetAttributes(attribute.String("advent.turnstile.outcome", "success"))
+		return nil
 	}
-	if !out.Success || out.Action != action || !slices.Contains(t.Hostnames, strings.ToLower(out.Hostname)) {
-		return reject
+	count(r.Context(), mTurnstile, outcome("rejected"), attribute.String("advent.turnstile.reason", reason))
+	span.SetAttributes(
+		attribute.String("advent.turnstile.outcome", "rejected"),
+		attribute.String("advent.turnstile.reason", reason),
+		attribute.StringSlice("advent.turnstile.error_codes", res.ErrorCodes),
+	)
+	attrs := []any{"reason", reason, "error_codes", res.ErrorCodes,
+		"hostname", res.Hostname, "allowed_hostnames", t.Hostnames, "action", res.Action, "want_action", action}
+	if err != nil {
+		attrs = append(attrs, "err", err)
+	}
+	slog.WarnContext(r.Context(), "turnstile rejected sign-up", attrs...)
+	return errf(http.StatusForbidden, "The bot check failed. Please try again.")
+}
+
+func (s *Server) checkToken(r *http.Request, token, action string) (siteverifyResult, string, error) {
+	if len(token) == 0 || len(token) > 2048 {
+		return siteverifyResult{}, "invalid_token", nil
+	}
+	res, reason, err := s.siteverify(r.Context(), token, s.rawClientIP(r))
+	switch {
+	case err != nil:
+		return res, reason, err
+	case !res.Success:
+		return res, "not_success", nil
+	case res.Action != action:
+		return res, "action_mismatch", nil
+	case !slices.Contains(s.turnstile.Hostnames, strings.ToLower(res.Hostname)):
+		return res, "hostname_mismatch", nil
+	}
+	return res, "", nil
+}
+
+// CheckTurnstile verifies at startup that Siteverify is reachable and the
+// secret is accepted, using Cloudflare's documented probe: a dummy token
+// must be rejected as invalid-input-response, not invalid-input-secret.
+func (s *Server) CheckTurnstile(ctx context.Context) error {
+	if !s.turnstile.enabled() {
+		return nil
+	}
+	res, reason, err := s.siteverify(ctx, "XXXX.DUMMY.TOKEN.XXXX", "")
+	if err != nil {
+		return fmt.Errorf("can't reach Cloudflare Siteverify (%s): %w; sign-ups will fail until the app can reach challenges.cloudflare.com", reason, err)
+	}
+	if slices.Contains(res.ErrorCodes, "invalid-input-secret") || slices.Contains(res.ErrorCodes, "missing-input-secret") {
+		return fmt.Errorf("Cloudflare rejected TURNSTILE_SECRET_KEY (%v); check it belongs to the widget for site key %s", res.ErrorCodes, s.turnstile.SiteKey)
+	}
+	if res.Success || !slices.Contains(res.ErrorCodes, "invalid-input-response") {
+		return fmt.Errorf("unexpected Siteverify answer to the probe token: success=%v codes=%v", res.Success, res.ErrorCodes)
 	}
 	return nil
 }
