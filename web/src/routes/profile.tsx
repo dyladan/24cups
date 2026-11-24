@@ -14,12 +14,14 @@ import {
 } from '../api'
 import { ErrorText, Field, PageHeader, RatioInput, Segmented, Spinner, SuggestInput, TempInput, TimeInput, Toggle } from '../components/ui'
 import { formatRatio, formatTemp, formatTime } from '../lib/format'
+import { useThemePref, type ThemePref } from '../lib/theme'
 
 // ---------- settings ----------
 
 function Settings({ me }: { me: User }) {
   const qc = useQueryClient()
   const [displayName, setDisplayName] = useState(me.displayName)
+  const [theme, setTheme] = useThemePref()
   const update = useApiMutation((body: Partial<User>) => api<User>('/me', { method: 'PATCH', json: body }), [['coffees'], ['groups']])
   const patch = (body: Partial<User>) => update.mutate(body, { onSuccess: (u) => qc.setQueryData(['me'], u) })
 
@@ -54,6 +56,22 @@ function Settings({ me }: { me: User }) {
           options={[
             { value: 'C', label: '°C' },
             { value: 'F', label: '°F' },
+          ]}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <span>
+          <span className="label mb-0">Appearance</span>
+          <span className="block text-xs text-ink-3">Saved on this device</span>
+        </span>
+        <Segmented<ThemePref>
+          label="Appearance"
+          value={theme}
+          onChange={setTheme}
+          options={[
+            { value: 'system', label: 'System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
           ]}
         />
       </div>

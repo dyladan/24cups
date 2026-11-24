@@ -2,6 +2,9 @@
 @import '@fontsource-variable/inter/wght.css';
 @import '@fontsource-variable/archivo/wdth.css';
 
+/* Theme is chosen by data-theme on <html> (set in index.html / lib/theme.ts). */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
 /*
  * Palette taken from the 2026 calendar packaging: crimson box, gold foil,
  * cream lineup card with deep-burgundy type, and the black puzzle box for
@@ -25,24 +28,22 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #141110;
-    --paper-2: #1e1a18;
-    --card: #1c1817;
-    --ink: #f1e8da;
-    --ink-2: #c3b6a5;
-    --ink-3: #8d8173;
-    --line: #362e2a;
-    --heading: #f1e8da;
-    --accent: #c42840;
-    --accent-ink: #ffffff;
-    --gold: #d9b96f;
-    --gold-text: #d9b96f;
-    --door: #8e1428;
-    --door-ink: #ecd08a;
-    color-scheme: dark;
-  }
+:root[data-theme='dark'] {
+  --paper: #141110;
+  --paper-2: #1e1a18;
+  --card: #1c1817;
+  --ink: #f1e8da;
+  --ink-2: #c3b6a5;
+  --ink-3: #8d8173;
+  --line: #362e2a;
+  --heading: #f1e8da;
+  --accent: #c42840;
+  --accent-ink: #ffffff;
+  --gold: #d9b96f;
+  --gold-text: #d9b96f;
+  --door: #8e1428;
+  --door-ink: #ecd08a;
+  color-scheme: dark;
 }
 
 @theme inline {
