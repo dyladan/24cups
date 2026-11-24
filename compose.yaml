@@ -39,6 +39,11 @@ services:
       OTEL_TRACES_SAMPLER_ARG: ${OTEL_TRACES_SAMPLER_ARG:-1.0}
     volumes:
       - advent-data:/data
+    depends_on:
+      # On a fresh volume, pull the latest backup from R2 before the app
+      # creates an empty database.
+      litestream-restore:
+        condition: service_completed_successfully
     networks:
       - internal
       - outbound # Cloudflare Siteverify + the host's OTel collector
@@ -50,6 +55,45 @@ services:
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 512m
+
+  # One-shot: restore from R2 if the database is missing and a backup exists;
+  # otherwise (database present, or first deploy with no backup) do nothing.
+  litestream-restore:
+    image: litestream/litestream:${LITESTREAM_VERSION:-0.5.18}
+    command: restore -if-db-not-exists -if-replica-exists /data/advent.db
+    user: "65532:65532" # same user as the app, so restored files stay writable
+    environment: &litestream-env
+      R2_ACCOUNT_ID: ${R2_ACCOUNT_ID:?set R2_ACCOUNT_ID in .env}
+      R2_BUCKET: ${R2_BUCKET:?set R2_BUCKET in .env}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:?set R2_ACCESS_KEY_ID in .env}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:?set R2_SECRET_ACCESS_KEY in .env}
+    volumes: &litestream-volumes
+      - advent-data:/data
+      - ./litestream.yml:/etc/litestream.yml:ro
+    networks: [outbound]
+    restart: "no"
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+
+  # Continuous replication of every committed change to R2.
+  litestream:
+    image: litestream/litestream:${LITESTREAM_VERSION:-0.5.18}
+    command: replicate
+    user: "65532:65532"
+    environment: *litestream-env
+    volumes: *litestream-volumes
+    depends_on:
+      app:
+        condition: service_healthy # the database exists by then
+    networks: [outbound]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 256m
 
   cloudflared:
     image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-latest}

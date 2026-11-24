@@ -171,9 +171,42 @@ cloudflared is an encrypted tunnel that cloudflared opens outbound. The only
 plain-HTTP hop is cloudflared → app, inside Docker's private network on the
 same machine. No origin certificate is needed.
 
-**Data** lives in the `advent-data` volume (`/data/advent.db`). Back it up
-with SQLite's online backup (e.g. `VACUUM INTO`), not by copying the file
-while the app is running.
+**Data** lives in the `advent-data` volume (`/data/advent.db`) and is
+replicated continuously to Cloudflare R2 by [Litestream](https://litestream.io)
+(see Backups).
+
+## Backups (Litestream → R2)
+
+The `litestream` container streams every committed change to R2. It takes a
+full snapshot daily and keeps 7 days of history (`litestream.yml`).
+
+**Setup:** in the Cloudflare dashboard → R2, create a bucket (e.g.
+`advent-cup-backups`), then an API token with **Object Read & Write**
+limited to that bucket. Put the account ID, bucket, access key ID and secret
+in `.env` (see `.env.example`).
+
+**Automatic restore:** before the app starts, `litestream-restore` checks
+the volume. If there's no database and R2 has a backup, it restores the
+latest one. To move hosts or recover from a lost disk, `docker compose up`
+with the same `.env` on an empty volume.
+
+**Check replication:**
+```sh
+docker compose logs litestream                               # replication activity / errors
+docker compose run --rm litestream-restore ltx /data/advent.db   # files in R2
+```
+
+**Restore to a point in time** (e.g. undo a bad change), into a separate
+file first:
+```sh
+docker compose run --rm litestream-restore restore \
+  -timestamp 2026-12-10T08:00:00Z -o /data/restored.db /data/advent.db
+# inspect it, then: docker compose stop app litestream,
+# move restored.db over advent.db (remove advent.db-wal/-shm), start again
+```
+
+**Test a restore** now and then, into a scratch path, so you know the
+backups work.
 
 ## Running
 

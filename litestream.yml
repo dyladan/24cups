@@ -1,0 +1,20 @@
+# Litestream: continuous SQLite replication to Cloudflare R2.
+# Values come from the environment (.env, never committed); see .env.example.
+# Docs: https://litestream.io/reference/config/
+
+# Full snapshot daily; keep a week of history, so you can restore to any
+# point in the last 7 days.
+snapshot:
+  interval: 24h
+  retention: 168h
+
+dbs:
+  - path: /data/advent.db
+    replica:
+      type: s3
+      bucket: ${R2_BUCKET}
+      path: advent-cup
+      endpoint: ${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+      region: auto
+      access-key-id: ${R2_ACCESS_KEY_ID}
+      secret-access-key: ${R2_SECRET_ACCESS_KEY}
