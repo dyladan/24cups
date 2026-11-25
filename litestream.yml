@@ -13,7 +13,7 @@ dbs:
     replica:
       type: s3
       bucket: ${R2_BUCKET}
-      path: advent-cup
+      path: onyx-advent
       endpoint: ${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
       region: auto
       access-key-id: ${R2_ACCESS_KEY_ID}

@@ -1,4 +1,4 @@
-module github.com/dyladan/advent-cup
+module github.com/dyladan/onyx-advent
 
 go 1.26.0
 

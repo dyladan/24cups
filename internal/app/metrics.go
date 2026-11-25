@@ -12,7 +12,7 @@ import (
 // is a no-op until telemetry.Setup installs a real one (instruments created
 // earlier are bound when it does).
 
-const instrumentationName = "github.com/dyladan/advent-cup/internal/app"
+const instrumentationName = "github.com/dyladan/onyx-advent/internal/app"
 
 var (
 	meter = otel.Meter(instrumentationName)

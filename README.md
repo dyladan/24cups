@@ -127,7 +127,7 @@ endpoint is set (`OTEL_SDK_DISABLED=true` also turns them off).
   `advent.turnstile.verifications`, `advent.live_updates.streams`.
 - **Logs:** the server's slog output also goes out as OTLP logs, correlated
   with the active span; it still prints to stderr.
-- **Resource:** `service.name=advent-cup`, `service.version` (build arg
+- **Resource:** `service.name=onyx-advent`, `service.version` (build arg
   `VERSION`), `host.name`, `deployment.environment.name` from
   `OTEL_RESOURCE_ATTRIBUTES`.
 
@@ -193,7 +193,7 @@ The `litestream` container streams every committed change to R2. It takes a
 full snapshot daily and keeps 7 days of history (`litestream.yml`).
 
 **Setup:** in the Cloudflare dashboard → R2, create a bucket (e.g.
-`advent-cup-backups`), then an API token with **Object Read & Write**
+`onyx-advent-backups`), then an API token with **Object Read & Write**
 limited to that bucket. Put the account ID, bucket, access key ID and secret
 in `.env` (see `.env.example`).
 
@@ -223,9 +223,9 @@ backups work.
 ## Running
 
 ```sh
-make build && ./advent-cup -db advent.db          # http://localhost:8080
+make build && ./onyx-advent -db advent.db          # http://localhost:8080
 # or
-docker build -t advent-cup . && docker run -p 8080:8080 -v advent-data:/data advent-cup   # local only; see Deploying
+docker build -t onyx-advent . && docker run -p 8080:8080 -v advent-data:/data onyx-advent   # local only; see Deploying
 ```
 
 | Flag / env | Default | |

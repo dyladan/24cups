@@ -13,16 +13,16 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 COPY --from=web /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /advent-cup ./cmd/advent-cup \
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X main.version=${VERSION}" -o /onyx-advent ./cmd/onyx-advent \
  && mkdir /data
 
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=server /advent-cup /advent-cup
+COPY --from=server /onyx-advent /onyx-advent
 # The database lives here; owned by the image's nonroot user (65532) so a
 # fresh named volume inherits writable permissions.
 COPY --from=server --chown=65532:65532 /data /data
 VOLUME /data
 ENV DB_PATH=/data/advent.db ADDR=:8080
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/advent-cup", "healthcheck"]
-ENTRYPOINT ["/advent-cup"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD ["/onyx-advent", "healthcheck"]
+ENTRYPOINT ["/onyx-advent"]

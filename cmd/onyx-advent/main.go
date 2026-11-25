@@ -13,9 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	advent "github.com/dyladan/advent-cup"
-	"github.com/dyladan/advent-cup/internal/app"
-	"github.com/dyladan/advent-cup/internal/telemetry"
+	advent "github.com/dyladan/onyx-advent"
+	"github.com/dyladan/onyx-advent/internal/app"
+	"github.com/dyladan/onyx-advent/internal/telemetry"
 )
 
 // version is set at build time (-ldflags "-X main.version=...").
