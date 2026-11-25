@@ -118,6 +118,9 @@ func TestSpoilerMigrationKeepsOldToggle(t *testing.T) {
 	}
 	// Rebuild a v2 database by hand: undo v6, v5, v4 and v3, then mark it v2.
 	for _, q := range []string{
+		`ALTER TABLE brews ADD COLUMN is_public INTEGER NOT NULL DEFAULT 1`,
+		`ALTER TABLE brews DROP COLUMN visibility`,
+		`ALTER TABLE users DROP COLUMN default_visibility`,
 		`DROP TABLE recovery_codes`,
 		`DROP TABLE passkeys`,
 		`DROP INDEX users_webauthn_id`,

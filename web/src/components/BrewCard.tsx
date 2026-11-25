@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
-import { EyeOff, Lock, Pencil } from 'lucide-react'
+import { EyeOff, Lock, Pencil, Users } from 'lucide-react'
 import { meQuery, type Brew } from '../api'
 import { formatDate, formatRatio, formatTemp, formatTime } from '../lib/format'
 import { Stars } from './ui'
@@ -29,13 +29,18 @@ export function BrewCard({ brew, showCoffee = false, showUser = true }: { brew: 
         <div className="flex shrink-0 flex-col items-end gap-1">
           {brew.rating != null ? <Stars value={brew.rating / 4} size={15} /> : <span className="text-xs text-ink-3">Unrated</span>}
           <div className="flex items-center gap-2 text-ink-3">
-            {!brew.isPublic && (
+            {brew.visibility === 'private' && (
               <span title="Private brew">
                 <Lock size={13} />
               </span>
             )}
+            {brew.visibility === 'groups' && (
+              <span title="Visible to your groups">
+                <Users size={13} />
+              </span>
+            )}
             {brew.excludeFromGlobal && (
-              <span title="Excluded from global ratings">
+              <span title="Excluded from ratings">
                 <EyeOff size={13} />
               </span>
             )}

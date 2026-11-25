@@ -194,11 +194,17 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, u *User) error
 		return err
 	}
 	d := &GroupDetail{Group: *g, Members: []GroupMember{}, Coffees: []GroupCoffee{}}
+	// Members see each other's groups-only brews; visitors to a public
+	// group see public brews only.
+	shared := `b.visibility = 'public'`
+	if g.Role != "" {
+		shared = `b.visibility IN ('public', 'groups')`
+	}
 
 	rows, err := s.rdb.QueryContext(r.Context(), `
 		SELECT u.id, u.username, u.display_name, m.display_name, m.role, m.joined_at,
 		       (SELECT COUNT(*) FROM coffee_opens o WHERE o.user_id = u.id),
-		       (SELECT COUNT(*) FROM brews b WHERE b.user_id = u.id AND b.is_public = 1)
+		       (SELECT COUNT(*) FROM brews b WHERE b.user_id = u.id AND `+shared+`)
 		FROM group_members m JOIN users u ON u.id = m.user_id
 		WHERE m.group_id = ?
 		ORDER BY m.role = 'owner' DESC, COALESCE(NULLIF(m.display_name, ''), u.display_name) COLLATE NOCASE`, id)
@@ -258,9 +264,10 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, u *User) error
 	}
 	rows.Close()
 
-	// Recent public brews by members, only for coffees the viewer has opened.
+	// Recent shared brews by members, only for coffees the viewer has
+	// revealed. The viewer's own brews follow the same rule here.
 	d.Brews, err = s.queryBrews(r.Context(), u, `
-		b.is_public = 1 AND `+u.revealedSQL()+`
+		`+shared+` AND `+u.revealedSQL()+`
 		AND b.user_id IN (SELECT user_id FROM group_members WHERE group_id = ?)`, 30, id)
 	if err != nil {
 		return err

@@ -243,6 +243,14 @@ UPDATE brews SET rating_q = rating * 2;
 ALTER TABLE brews DROP COLUMN rating;
 ALTER TABLE brews RENAME COLUMN rating_q TO rating;
 `,
+	// v8: three-way brew visibility (public, groups, private) replaces
+	// is_public, plus a per-user default for new brews.
+	`
+ALTER TABLE brews ADD COLUMN visibility TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'groups', 'private'));
+UPDATE brews SET visibility = 'private' WHERE is_public = 0;
+ALTER TABLE brews DROP COLUMN is_public;
+ALTER TABLE users ADD COLUMN default_visibility TEXT NOT NULL DEFAULT 'public' CHECK (default_visibility IN ('public', 'groups', 'private'));
+`,
 }
 
 func migrate(db *sql.DB) error {

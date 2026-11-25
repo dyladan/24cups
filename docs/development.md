@@ -64,7 +64,7 @@ make test   # go test ./... and the frontend typecheck
   rated brew or choose to reveal, the API doesn't send a coffee's tasting
   notes, community scores, flavors or other people's brews.
 - **Averages** are computed per user first, then across users, so one
-  prolific brewer can't skew a coffee. Private brews can be excluded.
+  prolific brewer can't skew a coffee. Any brew can be excluded, whatever its visibility.
 - **Flavors** count once per person per coffee. The list appears once 3
   people have tagged a coffee, and a typed-in flavor appears once 2 people
   use it.

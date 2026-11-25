@@ -190,4 +190,4 @@ func (s *Server) coffeeFlavors(ctx context.Context, viewer *User, coffeeID int64
 
 // includedFlavors selects brews whose descriptors count toward community
 // flavors: the same rule as ratings, but a star rating isn't required.
-const includedFlavors = `(b.is_public = 1 OR b.exclude_from_global = 0)`
+const includedFlavors = `(b.exclude_from_global = 0)`

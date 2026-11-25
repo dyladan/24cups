@@ -5,6 +5,9 @@ import type { CoffeeView } from './lib/anon'
 
 export type SpoilerMode = 'rated' | 'opened' | 'always'
 
+/** Who can see a brew: everyone, people in a group with you, or only you. */
+export type Visibility = 'public' | 'groups' | 'private'
+
 export interface User {
   id: number
   username: string
@@ -12,6 +15,8 @@ export interface User {
   /** When tasting notes and community scores appear. */
   spoilerMode: SpoilerMode
   tempUnit: 'C' | 'F'
+  /** Preselected for new brews. */
+  defaultVisibility: Visibility
   createdAt: string
 }
 
@@ -135,7 +140,7 @@ export interface Brew extends RecipeFields {
   notes: string
   /** Lowercase flavor tags. */
   descriptors: string[]
-  isPublic: boolean
+  visibility: Visibility
   excludeFromGlobal: boolean
   brewedAt: string
 }
@@ -150,7 +155,7 @@ export interface BrewInput extends RecipeFields {
   rating: number | null
   notes: string
   descriptors: string[]
-  isPublic: boolean
+  visibility: Visibility
   excludeFromGlobal: boolean
   brewedAt?: string
 }

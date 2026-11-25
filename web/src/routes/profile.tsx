@@ -15,6 +15,7 @@ import {
   type Recipe,
   type SpoilerMode,
   type User,
+  type Visibility,
 } from '../api'
 import { ErrorText, Field, PageHeader, RatioInput, Segmented, Spinner, SuggestInput, TempInput, TimeInput } from '../components/ui'
 import { formatDate, formatRatio, formatTemp, formatTime, plural } from '../lib/format'
@@ -22,6 +23,7 @@ import { RecoveryCodes } from '../components/RecoveryCodes'
 import { addPasskey, defaultPasskeyName, passkeysUsableHere } from '../lib/passkeys'
 import { useThemePref, type ThemePref } from '../lib/theme'
 import { useLogout } from '../lib/logout'
+import { visibilityOptions } from '../lib/visibility'
 
 // ---------- settings ----------
 
@@ -100,6 +102,18 @@ function Settings({ me }: { me: User }) {
               ? 'Tasting notes and community scores appear as soon as you open a door.'
               : 'Also shows community scores on sealed doors. The coffee itself stays hidden until you open it.'}
         </p>
+      </div>
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <span className="label mb-0">New brews visible to</span>
+          <Segmented<Visibility>
+            label="New brews visible to"
+            value={me.defaultVisibility}
+            onChange={(defaultVisibility) => patch({ defaultVisibility })}
+            options={visibilityOptions}
+          />
+        </div>
+        <p className="mt-1.5 text-xs text-ink-3">The default when you log a brew. You can change it on each brew.</p>
       </div>
       <ErrorText error={update.error} />
       <div className="border-t border-line pt-4">

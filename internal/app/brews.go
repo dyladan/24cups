@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -33,9 +34,23 @@ type Brew struct {
 	Rating            *int     `json:"rating"` // 1–20 quarter-stars
 	Notes             string   `json:"notes"`
 	Descriptors       []string `json:"descriptors"` // normalized lowercase flavor tags
-	IsPublic          bool     `json:"isPublic"`
+	Visibility        string   `json:"visibility"` // public, groups or private
 	ExcludeFromGlobal bool     `json:"excludeFromGlobal"`
 	BrewedAt          string   `json:"brewedAt"`
+}
+
+// Brew visibility. Public brews are visible to everyone, groups brews to
+// people sharing a group with the brewer, private brews only to the brewer
+// (always subject to spoilers). Visibility doesn't affect aggregate scores;
+// exclude_from_global does.
+const (
+	visPublic  = "public"
+	visGroups  = "groups"
+	visPrivate = "private"
+)
+
+func validVisibility(v string) bool {
+	return v == visPublic || v == visGroups || v == visPrivate
 }
 
 // queryBrews returns brews matching where (which must already restrict
@@ -46,7 +61,7 @@ func (s *Server) queryBrews(ctx context.Context, viewer *User, where string, lim
 		       CASE WHEN o.user_id IS NULL THEN NULL ELSE c.name END,
 		       b.recipe_id, b.method, b.dose_g, b.ratio, b.temp_c, b.target_time_s, b.actual_time_s,
 		       b.grinder_id, b.grinder_label, b.burrset, b.grind_setting,
-		       b.rating, b.notes, b.is_public, b.exclude_from_global, b.brewed_at
+		       b.rating, b.notes, b.visibility, b.exclude_from_global, b.brewed_at
 		FROM brews b
 		JOIN users u ON u.id = b.user_id
 		JOIN coffees c ON c.id = b.coffee_id
@@ -65,7 +80,7 @@ func (s *Server) queryBrews(ctx context.Context, viewer *User, where string, lim
 		if err := rows.Scan(&b.ID, &b.UserID, &b.Username, &b.DisplayName, &b.CoffeeID, &b.CoffeeDay, &b.CoffeeName,
 			&b.RecipeID, &b.Method, &b.DoseG, &b.Ratio, &b.TempC, &b.TargetTimeS, &b.ActualTimeS,
 			&b.GrinderID, &b.GrinderLabel, &b.Burrset, &b.GrindSetting,
-			&b.Rating, &b.Notes, &b.IsPublic, &b.ExcludeFromGlobal, &b.BrewedAt); err != nil {
+			&b.Rating, &b.Notes, &b.Visibility, &b.ExcludeFromGlobal, &b.BrewedAt); err != nil {
 			return nil, err
 		}
 		b.Mine = b.UserID == viewer.ID
@@ -142,7 +157,7 @@ func (s *Server) getBrew(w http.ResponseWriter, r *http.Request, u *User) error 
 	if err != nil {
 		return err
 	}
-	list, err := s.queryBrews(r.Context(), u, `b.id = ? AND (b.user_id = ? OR (b.is_public = 1 AND `+u.revealedSQL()+`))`, 1, id, u.ID)
+	list, err := s.queryBrews(r.Context(), u, `b.id = ? AND `+u.visibleSQL(), 1, id)
 	if err != nil {
 		return err
 	}
@@ -164,9 +179,14 @@ type brewInput struct {
 	Rating            *int     `json:"rating"`
 	Notes             string   `json:"notes"`
 	Descriptors       []string `json:"descriptors"`
-	IsPublic          bool     `json:"isPublic"`
-	ExcludeFromGlobal bool     `json:"excludeFromGlobal"`
-	BrewedAt          *string  `json:"brewedAt"`
+	// Visibility is public, groups or private. Empty means the user's
+	// default on create and unchanged on update.
+	Visibility string `json:"visibility"`
+	// IsPublic is the pre-visibility field, still accepted from older
+	// clients when visibility is absent.
+	IsPublic          *bool   `json:"isPublic"`
+	ExcludeFromGlobal bool    `json:"excludeFromGlobal"`
+	BrewedAt          *string `json:"brewedAt"`
 }
 
 func (s *Server) readBrew(w http.ResponseWriter, r *http.Request, u *User) (*brewInput, string, error) {
@@ -202,8 +222,14 @@ func (s *Server) readBrew(w http.ResponseWriter, r *http.Request, u *User) (*bre
 	if in.Descriptors, err = cleanDescriptors(in.Descriptors); err != nil {
 		return nil, "", err
 	}
-	if in.IsPublic {
-		in.ExcludeFromGlobal = false
+	if in.Visibility == "" && in.IsPublic != nil {
+		in.Visibility = visPrivate
+		if *in.IsPublic {
+			in.Visibility = visPublic
+		}
+	}
+	if in.Visibility != "" && !validVisibility(in.Visibility) {
+		return nil, "", errf(400, "visibility must be public, groups or private")
 	}
 	if in.RecipeID != nil {
 		var x int
@@ -244,6 +270,9 @@ func (s *Server) createBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	if err := s.capCheck(r, `SELECT COUNT(*) FROM brews WHERE user_id = ? AND coffee_id = ?`, s.guards.cfg.MaxBrewsPerCoffee, "You can log up to %d brews per coffee.", u.ID, in.CoffeeID); err != nil {
 		return err
 	}
+	if in.Visibility == "" {
+		in.Visibility = cmp.Or(u.DefaultVisibility, visPublic)
+	}
 	tx, err := s.db.BeginTx(r.Context(), nil)
 	if err != nil {
 		return err
@@ -255,10 +284,10 @@ func (s *Server) createBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	}
 	res, err := tx.Exec(`
 		INSERT INTO brews(user_id, coffee_id, recipe_id, method, dose_g, ratio, temp_c, target_time_s, actual_time_s,
-		                  grinder_id, grinder_label, burrset, grind_setting, rating, notes, is_public, exclude_from_global, brewed_at, created_at)
+		                  grinder_id, grinder_label, burrset, grind_setting, rating, notes, visibility, exclude_from_global, brewed_at, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.ID, in.CoffeeID, in.RecipeID, in.Method, in.DoseG, in.Ratio, in.TempC, in.TargetTimeS, in.ActualTimeS,
-		in.GrinderID, label, in.Burrset, in.GrindSetting, in.Rating, in.Notes, boolInt(in.IsPublic), boolInt(in.ExcludeFromGlobal), *in.BrewedAt, now())
+		in.GrinderID, label, in.Burrset, in.GrindSetting, in.Rating, in.Notes, in.Visibility, boolInt(in.ExcludeFromGlobal), *in.BrewedAt, now())
 	if err != nil {
 		return err
 	}
@@ -305,11 +334,11 @@ func (s *Server) updateBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	res, err := tx.Exec(`
 		UPDATE brews SET coffee_id=?, recipe_id=?, method=?, dose_g=?, ratio=?, temp_c=?, target_time_s=?, actual_time_s=?,
 		       grinder_id=?, grinder_label=CASE WHEN ? IS NULL THEN grinder_label ELSE ? END, burrset=?, grind_setting=?,
-		       rating=?, notes=?, is_public=?, exclude_from_global=?, brewed_at=?
+		       rating=?, notes=?, visibility=COALESCE(NULLIF(?, ''), visibility), exclude_from_global=?, brewed_at=?
 		WHERE id = ? AND user_id = ?`,
 		in.CoffeeID, in.RecipeID, in.Method, in.DoseG, in.Ratio, in.TempC, in.TargetTimeS, in.ActualTimeS,
 		in.GrinderID, in.GrinderID, label, in.Burrset, in.GrindSetting,
-		in.Rating, in.Notes, boolInt(in.IsPublic), boolInt(in.ExcludeFromGlobal), *in.BrewedAt, id, u.ID)
+		in.Rating, in.Notes, in.Visibility, boolInt(in.ExcludeFromGlobal), *in.BrewedAt, id, u.ID)
 	if err != nil {
 		return err
 	}
@@ -358,8 +387,8 @@ func (s *Server) deleteBrew(w http.ResponseWriter, r *http.Request, u *User) err
 }
 
 // brewChanged covers stats, coffee brew lists, group feeds and the owner's
-// own brew list. Private brews still move averages unless excluded, so
-// everyone is told; they refetch only what they're allowed to see.
+// own brew list. Every brew moves averages unless excluded, so everyone is
+// told; they refetch only what they're allowed to see.
 func (s *Server) brewChanged(r *http.Request, u *User, coffeeIDs ...int64) {
 	s.refreshStats(r, u.ID, coffeeIDs...)
 	s.notify(r, keyCoffees, keyGroups)

@@ -37,7 +37,9 @@ type User struct {
 	anonDay      int
 	anonSpoilers bool
 	TempUnit     string `json:"tempUnit"`
-	CreatedAt    string `json:"createdAt"`
+	// DefaultVisibility is preselected for new brews (see Brew.Visibility).
+	DefaultVisibility string `json:"defaultVisibility"`
+	CreatedAt         string `json:"createdAt"`
 }
 
 var usernameRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{3,32}$`)
@@ -66,11 +68,11 @@ func (s *Server) currentUser(r *http.Request) (*User, error) {
 	}
 	u := &User{}
 	err = s.rdb.QueryRowContext(r.Context(), `
-		SELECT u.id, u.username, u.display_name, u.spoiler_mode, u.temp_unit, u.created_at
+		SELECT u.id, u.username, u.display_name, u.spoiler_mode, u.temp_unit, u.default_visibility, u.created_at
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.token_hash = ? AND s.expires_at > ?`,
 		hashToken(c.Value), time.Now().Unix(),
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.SpoilerMode, &u.TempUnit, &u.CreatedAt)
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.SpoilerMode, &u.TempUnit, &u.DefaultVisibility, &u.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -230,6 +232,19 @@ func (u *User) revealedSQL() string {
 		SELECT 1 FROM brews rb WHERE rb.user_id = %d AND rb.coffee_id = b.coffee_id AND rb.rating IS NOT NULL)))`, u.ID)
 }
 
+// visibleSQL is a SQL condition, over brew b and the viewer's coffee_opens
+// row aliased o, that is true when u may see b: their own brews, plus
+// public brews and brews shared with a group u is in, once the coffee is
+// revealed for u. Signed-out visitors see public brews only.
+func (u *User) visibleSQL() string {
+	if u.anon {
+		return "(b.visibility = 'public')"
+	}
+	return fmt.Sprintf(`(b.user_id = %d OR ((b.visibility = 'public' OR (b.visibility = 'groups' AND EXISTS (
+		SELECT 1 FROM group_members gv JOIN group_members gb ON gb.group_id = gv.group_id
+		WHERE gv.user_id = %d AND gb.user_id = b.user_id))) AND %s))`, u.ID, u.ID, u.revealedSQL())
+}
+
 // isRevealed applies the same rule in Go.
 func (u *User) isRevealed(opened, rated, manual bool) bool {
 	return opened && (u.SpoilerMode != "rated" || rated || manual)
@@ -238,8 +253,8 @@ func (u *User) isRevealed(opened, rated, manual bool) bool {
 func (s *Server) loadUser(ctx context.Context, id int64) (*User, error) {
 	u := &User{}
 	err := s.rdb.QueryRowContext(ctx,
-		`SELECT id, username, display_name, spoiler_mode, temp_unit, created_at FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.SpoilerMode, &u.TempUnit, &u.CreatedAt)
+		`SELECT id, username, display_name, spoiler_mode, temp_unit, default_visibility, created_at FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.SpoilerMode, &u.TempUnit, &u.DefaultVisibility, &u.CreatedAt)
 	return u, err
 }
 
@@ -257,6 +272,8 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u *User) error
 		DisplayName *string `json:"displayName"`
 		SpoilerMode *string `json:"spoilerMode"`
 		TempUnit    *string `json:"tempUnit"`
+		// DefaultVisibility is preselected for new brews.
+		DefaultVisibility *string `json:"defaultVisibility"`
 	}
 	if err := readJSON(w, r, &in); err != nil {
 		return err
@@ -285,9 +302,15 @@ func (s *Server) updateMe(w http.ResponseWriter, r *http.Request, u *User) error
 		}
 		u.TempUnit = *in.TempUnit
 	}
+	if in.DefaultVisibility != nil {
+		if !validVisibility(*in.DefaultVisibility) {
+			return errf(400, "defaultVisibility must be public, groups or private")
+		}
+		u.DefaultVisibility = *in.DefaultVisibility
+	}
 	if _, err := s.db.ExecContext(r.Context(),
-		`UPDATE users SET display_name = ?, spoiler_mode = ?, temp_unit = ? WHERE id = ?`,
-		u.DisplayName, u.SpoilerMode, u.TempUnit, u.ID); err != nil {
+		`UPDATE users SET display_name = ?, spoiler_mode = ?, temp_unit = ?, default_visibility = ? WHERE id = ?`,
+		u.DisplayName, u.SpoilerMode, u.TempUnit, u.DefaultVisibility, u.ID); err != nil {
 		return err
 	}
 	s.notifyUser(r, u, keyMe, keyCoffees, keyGroups)

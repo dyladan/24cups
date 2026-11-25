@@ -14,17 +14,19 @@ import {
   useApiMutation,
   type Brew,
   type BrewInput,
+  type Visibility,
 } from '../api'
-import { ErrorText, Field, PageHeader, RatioInput, Spinner, StarInput, SuggestInput, TempInput, TimeInput, Toggle } from '../components/ui'
+import { ErrorText, Field, PageHeader, RatioInput, Segmented, Spinner, StarInput, SuggestInput, TempInput, TimeInput, Toggle } from '../components/ui'
 import { formatRatio, formatTemp, formatTime } from '../lib/format'
 import { FlavorPicker } from '../components/Flavors'
+import { visibilityHint, visibilityOptions } from '../lib/visibility'
 
 const newRoute = getRouteApi('/app/brews/new')
 const editRoute = getRouteApi('/app/brews/$brewId/edit')
 
 type Draft = Omit<BrewInput, 'ratio'> & { ratio: number | null }
 
-const emptyDraft = (coffeeId: number | undefined): Draft => ({
+const emptyDraft = (coffeeId: number | undefined, visibility: Visibility): Draft => ({
   coffeeId: coffeeId ?? 0,
   recipeId: null,
   method: '',
@@ -39,7 +41,7 @@ const emptyDraft = (coffeeId: number | undefined): Draft => ({
   rating: null,
   notes: '',
   descriptors: [],
-  isPublic: true,
+  visibility,
   excludeFromGlobal: false,
 })
 
@@ -59,7 +61,7 @@ function fromBrew(b: Brew): Draft {
     rating: b.rating,
     notes: b.notes,
     descriptors: b.descriptors ?? [],
-    isPublic: b.isPublic,
+    visibility: b.visibility,
     excludeFromGlobal: b.excludeFromGlobal,
     brewedAt: b.brewedAt,
   }
@@ -231,20 +233,24 @@ function BrewForm({ initial, brewId }: { initial: Draft; brewId?: number }) {
             <span className="label">Your rating</span>
             <StarInput value={d.rating} onChange={(rating) => set({ rating })} />
           </div>
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span className="label mb-0">Visible to</span>
+              <Segmented<Visibility>
+                label="Visible to"
+                value={d.visibility}
+                onChange={(visibility) => set({ visibility })}
+                options={visibilityOptions}
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-ink-3">{visibilityHint[d.visibility]}</p>
+          </div>
           <Toggle
-            checked={d.isPublic}
-            onChange={(isPublic) => set({ isPublic, excludeFromGlobal: isPublic ? false : d.excludeFromGlobal })}
-            label="Public brew"
-            hint="Other members see it once they've rated (or revealed) this coffee. Signed-out visitors see it with spoilers on."
+            checked={d.excludeFromGlobal}
+            onChange={(excludeFromGlobal) => set({ excludeFromGlobal })}
+            label="Exclude from ratings"
+            hint="Keep this rating and its flavors out of the community and group averages (e.g. a botched brew)."
           />
-          {!d.isPublic && (
-            <Toggle
-              checked={d.excludeFromGlobal}
-              onChange={(excludeFromGlobal) => set({ excludeFromGlobal })}
-              label="Exclude from global ratings"
-              hint="Keep this rating out of the community and group averages (e.g. a botched brew)."
-            />
-          )}
           <div className="border-t border-line pt-4 text-xs text-ink-3">
             {d.ratio != null && d.method && (
               <p>
@@ -276,12 +282,13 @@ function BrewForm({ initial, brewId }: { initial: Draft; brewId?: number }) {
 export function NewBrewPage() {
   const { coffeeId } = newRoute.useSearch()
   const { isPending } = useQuery(coffeesQuery())
-  if (isPending) return <Spinner />
+  const { data: me } = useQuery(meQuery)
+  if (isPending || !me) return <Spinner />
   return (
     <>
       <BackLink />
       <PageHeader eyebrow="New brew" title="Log a brew" />
-      <BrewForm initial={emptyDraft(coffeeId)} />
+      <BrewForm initial={emptyDraft(coffeeId, me.defaultVisibility)} />
     </>
   )
 }

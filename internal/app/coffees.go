@@ -109,9 +109,9 @@ func SeedCoffees(db *sql.DB, data []byte) error {
 
 // ---- stats ----
 
-// includedRatings selects ratings that count toward aggregate scores: all
-// public brews, plus private brews the owner didn't exclude.
-const includedRatings = `rating IS NOT NULL AND (is_public = 1 OR exclude_from_global = 0)`
+// includedRatings selects ratings that count toward aggregate scores: every
+// rated brew, whatever its visibility, unless the owner excluded it.
+const includedRatings = `rating IS NOT NULL AND exclude_from_global = 0`
 
 // computeStats returns stats per coffee id from the in-memory store. If
 // memberOf > 0 only members of that group are counted.
@@ -419,7 +419,7 @@ func (s *Server) coffeeBrews(w http.ResponseWriter, r *http.Request, u *User) er
 			writeJSON(w, 200, []*Brew{})
 			return nil
 		}
-		list, err := s.queryBrews(r.Context(), u, `b.coffee_id = ? AND b.is_public = 1`, 100, id)
+		list, err := s.queryBrews(r.Context(), u, `b.coffee_id = ? AND `+u.visibleSQL(), 100, id)
 		if err != nil {
 			return err
 		}
@@ -430,7 +430,7 @@ func (s *Server) coffeeBrews(w http.ResponseWriter, r *http.Request, u *User) er
 		writeJSON(w, 200, []*Brew{})
 		return nil
 	}
-	list, err := s.queryBrews(r.Context(), u, `b.coffee_id = ? AND (b.user_id = ? OR (b.is_public = 1 AND `+u.revealedSQL()+`))`, 100, id, u.ID)
+	list, err := s.queryBrews(r.Context(), u, `b.coffee_id = ? AND `+u.visibleSQL(), 100, id)
 	if err != nil {
 		return err
 	}
