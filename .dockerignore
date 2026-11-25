@@ -4,3 +4,5 @@ web/node_modules
 web/dist
 *.db*
 /24cups
+/onyx-advent
+/advent-cup

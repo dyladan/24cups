@@ -1,4 +1,6 @@
 /24cups
+/onyx-advent
+/advent-cup
 *.db
 *.db-shm
 *.db-wal
