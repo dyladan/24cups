@@ -30,7 +30,19 @@ export function Logo() {
 /** Header controls for signed-out visitors. */
 function AnonNav() {
   const [spoilers, setSpoilers] = useAnonSpoilers()
-  const href = useRouterState({ select: (st) => st.location.href })
+  // Return here after signing in, unless we're already on an auth page, in
+  // which case carry its redirect along so login/register don't bounce back
+  // to each other.
+  const redirect = useRouterState({
+    select: (st) => {
+      const { pathname, href, search } = st.location
+      if (pathname === '/login' || pathname === '/register') {
+        const r = (search as { redirect?: unknown }).redirect
+        return typeof r === 'string' ? r : undefined
+      }
+      return href
+    },
+  })
   return (
     <div className="flex items-center gap-2 sm:gap-3">
       <button
@@ -50,10 +62,10 @@ function AnonNav() {
           {spoilers ? 'on' : 'off'}
         </span>
       </button>
-      <Link to="/login" search={{ redirect: href }} className="hidden text-sm font-semibold text-ink-2 hover:text-ink sm:inline">
+      <Link to="/login" search={{ redirect }} className="hidden text-sm font-semibold text-ink-2 hover:text-ink sm:inline">
         Sign in
       </Link>
-      <Link to="/register" search={{ redirect: href }} className="btn btn-primary !px-3.5 !py-1.5 text-xs sm:!text-sm">
+      <Link to="/register" search={{ redirect }} className="btn btn-primary !px-3.5 !py-1.5 text-xs sm:!text-sm">
         Join
       </Link>
     </div>
