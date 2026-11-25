@@ -48,6 +48,8 @@ export interface Coffee {
   revealed: boolean
   myAvg: number | null
   myBrewCount: number
+  /** Today's name and origin while its door is sealed (not a spoiler). */
+  preview?: { name: string; origin: string }
 }
 
 export interface GroupStats extends Stats {
@@ -76,7 +78,6 @@ export interface CoffeeDetail extends Coffee {
   /** Absent on sealed doors. */
   flavors?: Flavors
 }
-
 
 export interface RecipeFields {
   method: string
@@ -222,7 +223,8 @@ export const meQuery = queryOptions({
 /** Public runtime config (e.g. the Turnstile site key, when enabled). */
 export const configQuery = queryOptions({
   queryKey: ['config'],
-  queryFn: () => api<{ turnstileSiteKey?: string }>('/config'),
+  /** devToday (YYYY-MM-DD) is set when the server runs with -dev-day. */
+  queryFn: () => api<{ turnstileSiteKey?: string; devToday?: string }>('/config'),
   staleTime: 5 * 60_000,
 })
 

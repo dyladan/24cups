@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { meQuery } from '../api'
+import { configQuery, meQuery } from '../api'
 
 /**
  * Signed-out visitors: a per-device "spoilers" switch (community ratings are
@@ -47,7 +47,42 @@ export function localDate(d = new Date()): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-/** What a signed-out visitor is looking at; null when signed in. */
+/**
+ * Today's date and door number (null outside December). The server can
+ * override the date for development (`DAY=3 make dev`); `ready` is false
+ * until we know whether it does.
+ */
+export function useToday(): { date: string; day: number | null; isFuture: (day: number) => boolean; ready: boolean } {
+  const { data, isPending } = useQuery(configQuery)
+  const date = data?.devToday ?? localDate()
+  const [, month, day] = date.split('-').map(Number)
+  const today = month === 12 ? day : null
+  // Outside December, February–November is before the calendar; January is after.
+  const isFuture = (d: number) => (today != null ? d > today : month >= 2)
+  return { date, day: today, isFuture, ready: !isPending }
+}
+
+// Doors whose Peek a signed-out visitor used on today's door: shown with
+// spoilers on the calendar and the coffee page until the page is reloaded.
+const peekedToday = new Set<number>()
+
+export function useTodayPeek(coffeeId: number): [boolean, (on: boolean) => void] {
+  const [, rerender] = useState(0)
+  return [
+    peekedToday.has(coffeeId),
+    (on: boolean) => {
+      if (on) peekedToday.add(coffeeId)
+      else peekedToday.delete(coffeeId)
+      rerender((n) => n + 1)
+    },
+  ]
+}
+
+/**
+ * Query context for coffee requests: today's date (decides which sealed door
+ * shows its name, and for signed-out visitors which doors are open) and the
+ * signed-out Spoilers switch (ignored for members). Null until ready.
+ */
 export interface CoffeeView {
   today: string
   spoilers: boolean
@@ -60,7 +95,8 @@ export interface CoffeeView {
 export function useCoffeeView(): { view: CoffeeView | null; ready: boolean; anon: boolean } {
   const { data: me, isPending } = useQuery(meQuery)
   const [spoilers] = useAnonSpoilers()
-  if (isPending) return { view: null, ready: false, anon: false }
-  if (me) return { view: null, ready: true, anon: false }
-  return { view: { today: localDate(), spoilers }, ready: true, anon: true }
+  const today = useToday()
+  if (isPending || !today.ready) return { view: null, ready: false, anon: !isPending && !me }
+  if (me) return { view: { today: today.date, spoilers: false }, ready: true, anon: false }
+  return { view: { today: today.date, spoilers }, ready: true, anon: true }
 }

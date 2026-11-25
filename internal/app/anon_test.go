@@ -9,6 +9,10 @@ import (
 )
 
 func setupAt(t *testing.T, now time.Time) *httptest.Server {
+	return setupAtDev(t, now, 0)
+}
+
+func setupAtDev(t *testing.T, now time.Time, devDay int) *httptest.Server {
 	path := filepath.Join(t.TempDir(), "t.db")
 	db, err := OpenDB(path)
 	if err != nil {
@@ -27,7 +31,7 @@ func setupAt(t *testing.T, now time.Time) *httptest.Server {
 	}
 	rdb, _ := OpenReadDB(path)
 	t.Cleanup(func() { rdb.Close() })
-	h, err := NewServer(db, rdb, Options{Limits: testLimits, CalendarYear: 2026, Now: func() time.Time { return now }})
+	h, err := NewServer(db, rdb, Options{Limits: testLimits, CalendarYear: 2026, DevDay: devDay, Now: func() time.Time { return now }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,5 +160,73 @@ func TestPeekShowsOnlyNameAndOrigin(t *testing.T) {
 	}
 	if s := newClient(t, srv).do("GET", "/coffees/99/peek", "", nil); s != 404 {
 		t.Errorf("unknown coffee: %d", s)
+	}
+}
+
+func TestDevDay(t *testing.T) {
+	// November, so nothing would be open without the override; the client's
+	// own date is ignored too.
+	srv := setupAtDev(t, time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC), 3)
+	if n := opened(anonGet(t, srv, "?today=2026-12-20")); n != 2 {
+		t.Errorf("dev day 3: %d doors open, want 2", n)
+	}
+	if n := opened(anonGet(t, srv, "?today=2026-12-20&spoilers=1")); n != 3 {
+		t.Errorf("dev day 3 with spoilers: %d doors open, want 3", n)
+	}
+	var cfg map[string]string
+	newClient(t, srv).do("GET", "/config", "", &cfg)
+	if cfg["devToday"] != "2026-12-03" {
+		t.Errorf("config: %v", cfg)
+	}
+	var plain map[string]string
+	newClient(t, setupAt(t, time.Now())).do("GET", "/config", "", &plain)
+	if _, ok := plain["devToday"]; ok {
+		t.Errorf("devToday set without a dev day: %v", plain)
+	}
+}
+
+func TestTodayPreview(t *testing.T) {
+	// Dec 3, 00:30 UTC: still Dec 3 in UTC+14, so "today=Dec 4" is capped.
+	srv := setupAt(t, time.Date(2026, 12, 3, 0, 30, 0, 0, time.UTC))
+	m := newClient(t, srv)
+	m.do("POST", "/auth/register", `{"username":"member","password":"password1"}`, nil)
+
+	previews := func(c *client, q string) map[int]*CoffeePreview {
+		t.Helper()
+		var list []Coffee
+		c.do("GET", "/coffees"+q, "", &list)
+		out := map[int]*CoffeePreview{}
+		for _, x := range list {
+			if x.Preview != nil {
+				out[x.Day] = x.Preview
+			}
+		}
+		return out
+	}
+	for name, c := range map[string]*client{"member": m, "anon": newClient(t, srv)} {
+		p := previews(c, "?today=2026-12-03")
+		if len(p) != 1 || p[3] == nil || p[3].Name != "C3" {
+			t.Errorf("%s: want a preview of day 3 only, got %v", name, p)
+		}
+		if p := previews(c, "?today=2026-12-04"); len(p) != 1 || p[3] == nil {
+			t.Errorf("%s: a future date must be capped to Dec 3, got %v", name, p)
+		}
+	}
+	// Signed-out visitors with spoilers on see today opened, so no preview.
+	if p := previews(newClient(t, srv), "?today=2026-12-03&spoilers=1"); len(p) != 0 {
+		t.Errorf("anon with spoilers: %v", p)
+	}
+	// Once a member opens today's door the preview gives way to the info.
+	m.do("POST", "/coffees/3/open", "", nil)
+	var d CoffeeDetail
+	m.do("GET", "/coffees/3?today=2026-12-03", "", &d)
+	if d.Preview != nil || d.Info == nil || d.Info.Name != "C3" {
+		t.Errorf("opened: %+v", d.Coffee)
+	}
+	// The preview carries only name and origin, never notes.
+	var raw []map[string]any
+	newClient(t, srv).do("GET", "/coffees?today=2026-12-03", "", &raw)
+	if pv, _ := raw[2]["preview"].(map[string]any); len(pv) != 2 || raw[2]["info"] != nil {
+		t.Errorf("anon day 3: %v", raw[2])
 	}
 }

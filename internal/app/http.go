@@ -31,6 +31,7 @@ type Server struct {
 	guards        *guards
 	ipHeader      string
 	calendarYear  int
+	devDay        int
 	now           func() time.Time
 	turnstile     *TurnstileConfig
 }
@@ -47,6 +48,9 @@ type Options struct {
 	// CalendarYear is the December the calendar belongs to (for anonymous
 	// visitors' door unlocking). Defaults to the current year.
 	CalendarYear int
+	// DevDay, when set, pretends it's that day of December for door
+	// unlocking and tells the frontend to do the same (development only).
+	DevDay int
 	// Now overrides the clock (tests).
 	Now func() time.Time
 	// Turnstile protects sign-up when its Secret is set.
@@ -65,7 +69,7 @@ func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
 		db: db, rdb: rdb, stats: stats, web: opts.Web, secureCookies: opts.SecureCookies,
 		mux: http.NewServeMux(), events: newBroker(opts.Limits),
 		guards: newGuards(opts.Limits), ipHeader: http.CanonicalHeaderKey(opts.ClientIPHeader),
-		calendarYear: opts.CalendarYear, now: opts.Now, turnstile: &opts.Turnstile,
+		calendarYear: opts.CalendarYear, devDay: opts.DevDay, now: opts.Now, turnstile: &opts.Turnstile,
 	}
 	if s.now == nil {
 		s.now = time.Now

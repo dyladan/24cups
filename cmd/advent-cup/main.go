@@ -62,6 +62,7 @@ func main() {
 	calYear := flag.Int("calendar-year", envInt("CALENDAR_YEAR", 2026), "year of the December the calendar covers (unlocks doors for signed-out visitors)")
 	tsSiteKey := flag.String("turnstile-site-key", envOr("TURNSTILE_SITE_KEY", ""), "Cloudflare Turnstile site key (public)")
 	tsHosts := flag.String("turnstile-hostnames", envOr("TURNSTILE_HOSTNAMES", ""), "comma-separated hostnames Turnstile tokens must come from")
+	devDay := flag.Int("dev-day", envInt("DEV_DAY", 0), "development only: pretend it's this day of December (1–31) for which doors are open")
 	noLimits := flag.Bool("no-rate-limits", envOr("NO_RATE_LIMITS", "false") == "true", "disable rate limits (benchmarks only)")
 	flag.Parse()
 
@@ -122,11 +123,18 @@ func main() {
 			}
 		}
 	}
+	if *devDay < 0 || *devDay > 31 {
+		slog.Error("-dev-day must be between 1 and 31", "dev_day", *devDay)
+		os.Exit(2)
+	}
+	if *devDay > 0 {
+		slog.Warn("pretending it's December for development", "day", *devDay, "year", *calYear)
+	}
 	if *ipHeader == "" {
 		slog.Warn("no -client-ip-header set; behind a proxy or tunnel every client shares one rate-limit bucket")
 	}
 	handler, err := app.NewServer(db, rdb, app.Options{
-		Web: advent.WebFS(), SecureCookies: *secure, ClientIPHeader: *ipHeader, Limits: limits, CalendarYear: *calYear,
+		Web: advent.WebFS(), SecureCookies: *secure, ClientIPHeader: *ipHeader, Limits: limits, CalendarYear: *calYear, DevDay: *devDay,
 		// The secret is read only from the environment so it never appears
 		// in process arguments.
 		Turnstile: app.TurnstileConfig{SiteKey: *tsSiteKey, Secret: os.Getenv("TURNSTILE_SECRET_KEY"), Hostnames: app.ParseHostnames(*tsHosts)},

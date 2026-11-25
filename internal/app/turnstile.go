@@ -175,6 +175,9 @@ func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) error {
 	if s.turnstile.enabled() {
 		cfg["turnstileSiteKey"] = s.turnstile.SiteKey
 	}
+	if d := s.devToday(); d != "" {
+		cfg["devToday"] = d
+	}
 	w.Header().Set("Cache-Control", "no-cache")
 	writeJSON(w, 200, cfg)
 	return nil

@@ -7,6 +7,7 @@ import { peekQuery } from '../api'
 /**
  * Peek state for a sealed door: shows the coffee's name and origin without
  * opening it. Nothing is saved; it resets when the page is left or reloaded.
+ * Today's door doesn't need it: the server sends its name (Coffee.preview).
  */
 export function usePeek(coffeeId: number) {
   const [on, setOn] = useState(false)

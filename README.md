@@ -9,7 +9,9 @@ Lab or Fellow**.
 - **Signed-out visitors** see everything for days before today: coffee,
   tasting notes, ratings and public brews. Today's door stays sealed, so a
   member browsing signed out isn't spoiled before opening it, unless they flip the
-  **Spoilers** switch in the header (saved on the device). Later doors are
+  **Spoilers** switch in the header (saved on the device) or Peek at that door.
+  Today's coffee name and origin aren't spoilers: everyone, signed in or not,
+  sees them on today's sealed door. Later doors are
   always sealed. "Today" is the visitor's local date, capped at the date in
   UTC+14 so a faked clock can't unlock doors early. The December is set with
   `-calendar-year` / `CALENDAR_YEAR`.
@@ -235,7 +237,8 @@ docker build -t advent-cup . && docker run -p 8080:8080 -v advent-data:/data adv
 | `TURNSTILE_SECRET_KEY` (env only) | none | enables the Turnstile check on sign-up |
 | `-turnstile-site-key` / `TURNSTILE_SITE_KEY` | none | public widget key |
 | `-turnstile-hostnames` / `TURNSTILE_HOSTNAMES` | none | comma-separated allowed hostnames (required with a secret) |
-| `-no-rate-limits` / `NO_RATE_LIMITS=true` | false | benchmarks only |
+| `-no-rate-limits` / `NO_RATE_LIMITS=true` | false | benchmarks and `make dev` only |
+| `-dev-day` / `DEV_DAY` | 0 (off) | development only: pretend it's this day of December. `DAY=3 make dev` sets it |
 
 ## Calendar contents
 

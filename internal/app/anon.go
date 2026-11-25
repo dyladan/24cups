@@ -30,10 +30,14 @@ func (s *Server) anonViewer(r *http.Request) *User {
 	}
 }
 
-// unlockedDay returns "today" as a door number for an anonymous visitor:
-// 0 before December 1 of the calendar year, the day of the month during
-// December, and past every door afterwards.
+// unlockedDay returns "today" as a door number: 0 before December 1 of the
+// calendar year, the day of the month during December, and past every door
+// afterwards. It decides which doors a signed-out visitor sees and, for
+// everyone, which sealed door shows its name (Coffee.Preview).
 func (s *Server) unlockedDay(r *http.Request) int {
+	if s.devDay > 0 {
+		return s.devDay
+	}
 	now := s.now()
 	latest := civil(now.In(earliestZone))
 	day := civil(now.UTC())
@@ -54,6 +58,14 @@ func (s *Server) unlockedDay(r *http.Request) int {
 	default:
 		return day.Day()
 	}
+}
+
+// devToday is the pretend date for DevDay, as YYYY-MM-DD, or "".
+func (s *Server) devToday() string {
+	if s.devDay <= 0 {
+		return ""
+	}
+	return time.Date(s.calendarYear, time.December, s.devDay, 0, 0, 0, 0, time.UTC).Format(time.DateOnly)
 }
 
 // civil drops the time of day, keeping the calendar date (as UTC midnight).

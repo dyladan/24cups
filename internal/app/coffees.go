@@ -45,6 +45,14 @@ type Coffee struct {
 	Revealed    bool     `json:"revealed"`
 	MyAvg       *float64 `json:"myAvg"` // 0–5 scale
 	MyBrewCount int      `json:"myBrewCount"`
+	// Preview is today's coffee name and origin while its door is still
+	// sealed for the viewer. Those aren't spoilers; notes and scores are.
+	Preview *CoffeePreview `json:"preview,omitempty"`
+}
+
+type CoffeePreview struct {
+	Name   string `json:"name"`
+	Origin string `json:"origin"`
 }
 
 type CoffeeDetail struct {
@@ -129,7 +137,9 @@ func (s *Server) computeStats(ctx context.Context, coffeeID, memberOf int64) (ma
 
 // ---- handlers ----
 
-func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Coffee, error) {
+// today is the viewer's door number for today (see unlockedDay); its
+// sealed door gets a Preview.
+func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64, today int) ([]*Coffee, error) {
 	q := `
 		SELECT c.id, c.day, c.name, c.origin, c.region, c.producer, c.process, c.variety, c.elevation,
 		       c.roast_level, c.tasting_notes, c.description,
@@ -185,6 +195,9 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 		if st == nil {
 			st = &Stats{}
 		}
+		if !c.Opened && c.Day == today {
+			c.Preview = &CoffeePreview{Name: info.Name, Origin: info.Origin}
+		}
 		switch {
 		case c.Revealed:
 			c.Info, c.Stats = info, st
@@ -204,7 +217,7 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64) ([]*Cof
 }
 
 func (s *Server) listCoffees(w http.ResponseWriter, r *http.Request, u *User) error {
-	list, err := s.loadCoffees(r.Context(), u, 0)
+	list, err := s.loadCoffees(r.Context(), u, 0, s.unlockedDay(r))
 	if err != nil {
 		return err
 	}
@@ -220,7 +233,7 @@ func (s *Server) getCoffee(w http.ResponseWriter, r *http.Request, u *User) erro
 	if err != nil {
 		return err
 	}
-	list, err := s.loadCoffees(r.Context(), u, id)
+	list, err := s.loadCoffees(r.Context(), u, id, s.unlockedDay(r))
 	if err != nil {
 		return err
 	}
