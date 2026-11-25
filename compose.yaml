@@ -26,7 +26,7 @@ services:
       CALENDAR_YEAR: ${CALENDAR_YEAR:-2026}
       # Bot check on sign-up. The site key is public; the secret and the
       # allowed hostnames come from .env. With no secret, sign-up has no check.
-      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-0x4AAAAAAGRV0UPs2N-iBLmI}
+      TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
       # Passkey sign-in, bound to this hostname (from .env). Empty = off.

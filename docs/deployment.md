@@ -51,8 +51,7 @@ origin certificate is needed.
 Create a Turnstile widget in the Cloudflare dashboard for your hostname, then
 set these in `.env`:
 
-- `TURNSTILE_SITE_KEY`: your widget's public site key. `compose.yaml` falls
-  back to the original instance's key, which won't work for your hostname.
+- `TURNSTILE_SITE_KEY`: your widget's public site key.
 - `TURNSTILE_SECRET_KEY`: the secret key. Keep it only in `.env`.
 - `TURNSTILE_HOSTNAMES`: your hostname(s), comma-separated. They must match the
   widget's domains. The app refuses to start if a secret is set without them.
