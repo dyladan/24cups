@@ -12,6 +12,7 @@ import (
 	"path"
 	"strconv"
 
+	"github.com/go-webauthn/webauthn/webauthn"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/codes"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
@@ -34,6 +35,8 @@ type Server struct {
 	devDay        int
 	now           func() time.Time
 	turnstile     *TurnstileConfig
+	wa            *webauthn.WebAuthn // nil when passkeys are off
+	ceremonies    *ceremonies
 }
 
 // Options configures a Server.
@@ -55,11 +58,17 @@ type Options struct {
 	Now func() time.Time
 	// Turnstile protects sign-up when its Secret is set.
 	Turnstile TurnstileConfig
+	// Passkeys enables WebAuthn sign-up and sign-in when RPID is set.
+	Passkeys PasskeyConfig
 }
 
 func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
 	if err := opts.Turnstile.Validate(); err != nil {
 		return nil, err
+	}
+	wa, err := newWebAuthn(opts.Passkeys)
+	if err != nil {
+		return nil, fmt.Errorf("passkeys: %w", err)
 	}
 	stats, err := loadStats(context.Background(), rdb)
 	if err != nil {
@@ -70,6 +79,7 @@ func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
 		mux: http.NewServeMux(), events: newBroker(opts.Limits),
 		guards: newGuards(opts.Limits), ipHeader: http.CanonicalHeaderKey(opts.ClientIPHeader),
 		calendarYear: opts.CalendarYear, devDay: opts.DevDay, now: opts.Now, turnstile: &opts.Turnstile,
+		wa: wa, ceremonies: newCeremonies(),
 	}
 	if s.now == nil {
 		s.now = time.Now
@@ -83,7 +93,21 @@ func NewServer(db, rdb *sql.DB, opts Options) (*Server, error) {
 }
 
 // Run starts background housekeeping until ctx is done.
-func (s *Server) Run(ctx context.Context) { s.guards.janitor(ctx) }
+func (s *Server) Run(ctx context.Context) {
+	go func() {
+		t := time.NewTicker(time.Minute)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				s.ceremonies.prune()
+			}
+		}
+	}()
+	s.guards.janitor(ctx)
+}
 
 // refreshStats updates the in-memory aggregates after a write. Failures are
 // logged rather than surfaced: the write itself succeeded.
@@ -167,6 +191,20 @@ func (s *Server) routes() {
 	m.HandleFunc("GET /api/auth/me", s.authed(s.me))
 	m.HandleFunc("PATCH /api/me", s.authed(s.updateMe))
 	m.HandleFunc("POST /api/me/password", s.authed(s.changePassword))
+	m.HandleFunc("DELETE /api/me/password", s.authed(s.removePassword))
+
+	// passkeys and recovery codes
+	m.HandleFunc("POST /api/auth/passkey/register/begin", s.h(s.passkeySignupBegin))
+	m.HandleFunc("POST /api/auth/passkey/register/finish", s.h(s.passkeySignupFinish))
+	m.HandleFunc("POST /api/auth/passkey/login/begin", s.h(s.passkeyLoginBegin))
+	m.HandleFunc("POST /api/auth/passkey/login/finish", s.h(s.passkeyLoginFinish))
+	m.HandleFunc("POST /api/auth/recover", s.h(s.recoverLogin))
+	m.HandleFunc("GET /api/me/security", s.authed(s.getSecurity))
+	m.HandleFunc("POST /api/me/passkeys/begin", s.authed(s.addPasskeyBegin))
+	m.HandleFunc("POST /api/me/passkeys/finish", s.authed(s.addPasskeyFinish))
+	m.HandleFunc("PATCH /api/me/passkeys/{id}", s.authed(s.renamePasskey))
+	m.HandleFunc("DELETE /api/me/passkeys/{id}", s.authed(s.deletePasskey))
+	m.HandleFunc("POST /api/me/recovery-codes", s.authed(s.regenerateRecoveryCodes))
 
 	m.HandleFunc("GET /api/catalog", s.h(s.catalog))
 	m.HandleFunc("GET /api/config", s.h(s.publicConfig))

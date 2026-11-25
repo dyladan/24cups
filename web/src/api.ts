@@ -15,6 +15,20 @@ export interface User {
   createdAt: string
 }
 
+export interface Passkey {
+  id: number
+  name: string
+  createdAt: string
+  lastUsedAt: string | null
+}
+
+export interface SecurityInfo {
+  passkeysEnabled: boolean
+  hasPassword: boolean
+  passkeys: Passkey[]
+  recoveryCodesLeft: number
+}
+
 export interface CoffeeInfo {
   name: string
   origin: string
@@ -228,8 +242,14 @@ export const meQuery = queryOptions({
 export const configQuery = queryOptions({
   queryKey: ['config'],
   /** devToday (YYYY-MM-DD) is set when the server runs with -dev-day. */
-  queryFn: () => api<{ turnstileSiteKey?: string; devToday?: string }>('/config'),
+  /** passkeys is true when the server has passkeys configured. */
+  queryFn: () => api<{ turnstileSiteKey?: string; devToday?: string; passkeys?: boolean }>('/config'),
   staleTime: 5 * 60_000,
+})
+
+export const securityQuery = queryOptions({
+  queryKey: ['security'],
+  queryFn: () => api<SecurityInfo>('/me/security'),
 })
 
 export const catalogQuery = queryOptions({

@@ -214,6 +214,27 @@ CREATE TABLE brew_descriptors (
 	`
 ALTER TABLE group_members ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
 `,
+	// v6: passkeys and recovery codes. Passkey-only accounts have an empty
+	// password_hash. webauthn_id is the random user handle passkeys carry.
+	`
+ALTER TABLE users ADD COLUMN webauthn_id BLOB;
+CREATE UNIQUE INDEX users_webauthn_id ON users(webauthn_id);
+CREATE TABLE passkeys (
+	id            INTEGER PRIMARY KEY,
+	user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	credential_id BLOB NOT NULL UNIQUE,
+	credential    TEXT NOT NULL, -- JSON: public key, sign count, flags
+	name          TEXT NOT NULL,
+	created_at    TEXT NOT NULL,
+	last_used_at  TEXT
+);
+CREATE INDEX passkeys_user ON passkeys(user_id);
+CREATE TABLE recovery_codes (
+	user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	code_hash TEXT NOT NULL,
+	PRIMARY KEY (user_id, code_hash)
+);
+`,
 }
 
 func migrate(db *sql.DB) error {

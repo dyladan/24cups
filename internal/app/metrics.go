@@ -35,6 +35,9 @@ func count(ctx context.Context, c metric.Int64Counter, attrs ...attribute.KeyVal
 
 func outcome(v string) attribute.KeyValue { return attribute.String("twentyfourcups.outcome", v) }
 
+// authMethod is how someone signed up or in: password, passkey or recovery_code.
+func authMethod(v string) attribute.KeyValue { return attribute.String("twentyfourcups.auth.method", v) }
+
 // registerStreamGauge reports open live-update streams.
 func (b *broker) registerStreamGauge() {
 	_, _ = meter.Int64ObservableUpDownCounter("twentyfourcups.live_updates.streams",

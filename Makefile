@@ -12,4 +12,4 @@ test:
 # Rate limits are off in dev so seeding and testing from one IP works.
 # DAY=3 make dev pretends it's December 3 (server and frontend).
 dev:
-	go run ./cmd/24cups -no-rate-limits $(if $(DAY),-dev-day=$(DAY))
+	go run ./cmd/24cups -no-rate-limits -passkey-rp-id=localhost -passkey-origins=http://localhost:5173,http://localhost:8080 $(if $(DAY),-dev-day=$(DAY))

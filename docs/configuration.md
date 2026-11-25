@@ -13,6 +13,8 @@ Every setting can be passed as a command-line flag or an environment variable.
 | `TURNSTILE_SECRET_KEY` (env only) | none | enables the Turnstile check on sign-up |
 | `-turnstile-site-key` / `TURNSTILE_SITE_KEY` | none | public widget key |
 | `-turnstile-hostnames` / `TURNSTILE_HOSTNAMES` | none | comma-separated allowed hostnames (required with a secret) |
+| `-passkey-rp-id` / `PASSKEY_RP_ID` | none (passkeys off) | hostname passkeys are bound to, e.g. `advent.example.com` |
+| `-passkey-origins` / `PASSKEY_ORIGINS` | `https://<rp-id>` | comma-separated origins allowed to use passkeys |
 | `-no-rate-limits` / `NO_RATE_LIMITS=true` | false | benchmarks and local development only |
 | `-dev-day` / `DEV_DAY` | 0 (off) | development only: pretend it's this day of December |
 

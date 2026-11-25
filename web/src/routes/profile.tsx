@@ -1,20 +1,25 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { LogOut, Pencil, Plus, Trash2, X } from 'lucide-react'
+import { KeyRound, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react'
 import {
   api,
   catalogQuery,
   grindersQuery,
   meQuery,
   recipesQuery,
+  securityQuery,
   useApiMutation,
+  type Passkey,
+  type SecurityInfo,
   type Grinder,
   type Recipe,
   type SpoilerMode,
   type User,
 } from '../api'
 import { ErrorText, Field, PageHeader, RatioInput, Segmented, Spinner, SuggestInput, TempInput, TimeInput } from '../components/ui'
-import { formatRatio, formatTemp, formatTime } from '../lib/format'
+import { formatDate, formatRatio, formatTemp, formatTime, plural } from '../lib/format'
+import { RecoveryCodes } from '../components/RecoveryCodes'
+import { addPasskey, defaultPasskeyName, passkeysSupported } from '../lib/passkeys'
 import { useThemePref, type ThemePref } from '../lib/theme'
 import { useLogout } from '../lib/logout'
 
@@ -27,10 +32,6 @@ function Settings({ me }: { me: User }) {
   const logout = useLogout()
   const update = useApiMutation((body: Partial<User>) => api<User>('/me', { method: 'PATCH', json: body }), [['coffees'], ['groups']])
   const patch = (body: Partial<User>) => update.mutate(body, { onSuccess: (u) => qc.setQueryData(['me'], u) })
-
-  const [cur, setCur] = useState('')
-  const [next, setNext] = useState('')
-  const pw = useApiMutation((body: object) => api('/me/password', { method: 'POST', json: body }))
 
   return (
     <section className="card space-y-5 p-5">
@@ -101,29 +102,190 @@ function Settings({ me }: { me: User }) {
         </p>
       </div>
       <ErrorText error={update.error} />
-      <details className="border-t border-line pt-4">
-        <summary className="cursor-pointer text-sm font-semibold">Change password</summary>
-        <form
-          className="mt-3 space-y-3"
-          onSubmit={(e: FormEvent) => {
-            e.preventDefault()
-            pw.mutate({ currentPassword: cur, newPassword: next }, { onSuccess: () => (setCur(''), setNext('')) })
-          }}
-        >
-          <input className="input" type="password" autoComplete="current-password" placeholder="Current password" value={cur} onChange={(e) => setCur(e.target.value)} required />
-          <input className="input" type="password" autoComplete="new-password" placeholder="New password (8+ characters)" value={next} onChange={(e) => setNext(e.target.value)} minLength={8} maxLength={72} required />
-          <ErrorText error={pw.error} />
-          {pw.isSuccess && <p className="text-sm text-green-700 dark:text-green-400">Password changed. Other devices were signed out.</p>}
-          <button className="btn btn-ghost" disabled={pw.isPending}>
-            Update password
-          </button>
-        </form>
-      </details>
       <div className="border-t border-line pt-4">
         <button type="button" className="btn btn-ghost w-full" onClick={() => logout()}>
           <LogOut size={16} /> Sign out
         </button>
       </div>
+    </section>
+  )
+}
+
+// ---------- sign-in & security ----------
+
+function PasskeyRow({ pk, onChange }: { pk: Passkey; onChange: (s: SecurityInfo) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [name, setName] = useState(pk.name)
+  const rename = useApiMutation((n: string) => api<SecurityInfo>(`/me/passkeys/${pk.id}`, { method: 'PATCH', json: { name: n } }))
+  const remove = useApiMutation(() => api<SecurityInfo>(`/me/passkeys/${pk.id}`, { method: 'DELETE' }))
+  return (
+    <li className="py-2">
+      {editing ? (
+        <form
+          className="flex gap-2"
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault()
+            rename.mutate(name, { onSuccess: (s) => (onChange(s), setEditing(false)) })
+          }}
+        >
+          <input className="input flex-1" value={name} onChange={(e) => setName(e.target.value)} maxLength={50} autoFocus aria-label="Passkey name" />
+          <button className="btn btn-ghost" disabled={rename.isPending}>
+            Save
+          </button>
+          <button type="button" className="btn btn-ghost" aria-label="Cancel" onClick={() => (setEditing(false), setName(pk.name))}>
+            <X size={16} />
+          </button>
+        </form>
+      ) : (
+        <div className="flex items-center gap-3">
+          <KeyRound size={16} className="shrink-0 text-ink-3" />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold">{pk.name}</p>
+            <p className="text-xs text-ink-3">
+              Added {formatDate(pk.createdAt)}
+              {pk.lastUsedAt ? ` · last used ${formatDate(pk.lastUsedAt)}` : ''}
+            </p>
+          </div>
+          <button type="button" className="btn btn-ghost px-2" aria-label={`Rename ${pk.name}`} onClick={() => setEditing(true)}>
+            <Pencil size={15} />
+          </button>
+          <button type="button" className="btn btn-ghost px-2" aria-label={`Remove ${pk.name}`} disabled={remove.isPending} onClick={() => remove.mutate(undefined, { onSuccess: onChange })}>
+            <Trash2 size={15} />
+          </button>
+        </div>
+      )}
+      <ErrorText error={rename.error ?? remove.error} />
+    </li>
+  )
+}
+
+function SignInSecurity({ me }: { me: User }) {
+  const qc = useQueryClient()
+  const { data: sec } = useQuery(securityQuery)
+  const set = (s: SecurityInfo) => qc.setQueryData(['security'], s)
+  const refresh = () => qc.invalidateQueries({ queryKey: ['security'] })
+  const [codes, setCodes] = useState<string[] | null>(null)
+  const [confirmRegen, setConfirmRegen] = useState(false)
+  const [cur, setCur] = useState('')
+  const [next, setNext] = useState('')
+
+  const add = useApiMutation(() => addPasskey(defaultPasskeyName()))
+  const pw = useApiMutation((body: object) => api('/me/password', { method: 'POST', json: body }))
+  const dropPw = useApiMutation(() => api<{ recoveryCodes?: string[] }>('/me/password', { method: 'DELETE' }))
+  const regen = useApiMutation(() => api<{ recoveryCodes: string[] }>('/me/recovery-codes', { method: 'POST' }))
+
+  if (!sec) return null
+  const passkeys = sec.passkeysEnabled && passkeysSupported
+
+  if (codes) {
+    return (
+      <section className="card space-y-4 p-5">
+        <h2 className="display text-xl">Save your recovery codes</h2>
+        <RecoveryCodes codes={codes} username={me.username} doneLabel="Done" onDone={() => (setCodes(null), refresh())} />
+      </section>
+    )
+  }
+
+  return (
+    <section className="card space-y-5 p-5">
+      <h2 className="display text-xl">Sign-in</h2>
+
+      {passkeys && (
+        <div className="space-y-2">
+          <span className="label mb-0">Passkeys</span>
+          {sec.passkeys.length > 0 ? (
+            <ul className="divide-y divide-line">
+              {sec.passkeys.map((pk) => (
+                <PasskeyRow key={pk.id} pk={pk} onChange={set} />
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-ink-3">
+              Sign in with your fingerprint, face or device PIN instead of a password. Your device keeps the key; this site only ever
+              sees a public key.
+            </p>
+          )}
+          <button type="button" className="btn btn-ghost w-full" disabled={add.isPending} onClick={() => add.mutate(undefined, { onSuccess: set })}>
+            <Plus size={16} /> {add.isPending ? 'Waiting for your device…' : 'Add a passkey'}
+          </button>
+          <ErrorText error={add.error} />
+        </div>
+      )}
+
+      <div className="space-y-2 border-t border-line pt-4">
+        <span className="label mb-0">Password</span>
+        <form
+          className="space-y-3"
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault()
+            pw.mutate({ currentPassword: cur, newPassword: next }, { onSuccess: () => (setCur(''), setNext(''), refresh()) })
+          }}
+        >
+          {sec.hasPassword ? (
+            <input className="input" type="password" autoComplete="current-password" placeholder="Current password" value={cur} onChange={(e) => setCur(e.target.value)} required />
+          ) : (
+            <p className="text-xs text-ink-3">You sign in with passkeys only. You can add a password as a fallback.</p>
+          )}
+          <input className="input" type="password" autoComplete="new-password" placeholder="New password (8+ characters)" value={next} onChange={(e) => setNext(e.target.value)} minLength={8} maxLength={72} required />
+          <ErrorText error={pw.error} />
+          {pw.isSuccess && <p className="text-sm text-green-700 dark:text-green-400">Password saved. Other devices were signed out.</p>}
+          <button className="btn btn-ghost w-full" disabled={pw.isPending}>
+            {sec.hasPassword ? 'Change password' : 'Add a password'}
+          </button>
+        </form>
+        {passkeys && sec.hasPassword && sec.passkeys.length > 0 && (
+          <>
+            <button
+              type="button"
+              className="btn btn-ghost w-full"
+              disabled={dropPw.isPending}
+              onClick={() =>
+                dropPw.mutate(undefined, {
+                  onSuccess: (r) => (r.recoveryCodes ? setCodes(r.recoveryCodes) : refresh()),
+                })
+              }
+            >
+              Remove password, use passkeys only
+            </button>
+            <ErrorText error={dropPw.error} />
+          </>
+        )}
+      </div>
+
+      {(sec.recoveryCodesLeft > 0 || sec.passkeys.length > 0) && (
+        <div className="space-y-2 border-t border-line pt-4">
+          <span className="label mb-0">Recovery codes</span>
+          <p className="text-xs text-ink-3">
+            {sec.recoveryCodesLeft > 0
+              ? `${plural(sec.recoveryCodesLeft, 'unused code')} left. Each one signs you in once if you lose your passkeys.`
+              : 'You have no recovery codes. Make some in case you lose your passkeys.'}
+          </p>
+          {confirmRegen ? (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="btn btn-primary flex-1"
+                disabled={regen.isPending}
+                onClick={() => regen.mutate(undefined, { onSuccess: (r) => (setConfirmRegen(false), setCodes(r.recoveryCodes)) })}
+              >
+                Replace my old codes
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={() => setConfirmRegen(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-ghost w-full"
+              onClick={() => (sec.recoveryCodesLeft > 0 ? setConfirmRegen(true) : regen.mutate(undefined, { onSuccess: (r) => setCodes(r.recoveryCodes) }))}
+            >
+              {sec.recoveryCodesLeft > 0 ? 'Make new codes' : 'Make recovery codes'}
+            </button>
+          )}
+          <ErrorText error={regen.error} />
+        </div>
+      )}
     </section>
   )
 }
@@ -371,8 +533,9 @@ export function ProfilePage() {
           <Recipes unit={me.tempUnit} />
           <Grinders />
         </div>
-        <div>
+        <div className="space-y-6">
           <Settings me={me} />
+          <SignInSecurity me={me} />
         </div>
       </div>
     </>
