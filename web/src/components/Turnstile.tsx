@@ -8,6 +8,7 @@ interface TurnstileAPI {
       sitekey: string
       action?: string
       theme?: 'light' | 'dark' | 'auto'
+      size?: 'normal' | 'flexible' | 'compact'
       callback?: (token: string) => void
       'expired-callback'?: () => void
       'error-callback'?: () => void
@@ -74,6 +75,7 @@ export const Turnstile = forwardRef<TurnstileHandle, { siteKey: string; action: 
           id.current = ts.render(el.current, {
             sitekey: siteKey,
             action,
+            size: 'flexible',
             theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
             callback: (t) => cb.current(t),
             'expired-callback': () => cb.current(null),
@@ -88,6 +90,6 @@ export const Turnstile = forwardRef<TurnstileHandle, { siteKey: string; action: 
       }
     }, [siteKey, action])
 
-    return <div ref={el} className="min-h-[65px]" />
+    return <div ref={el} className="min-h-[65px] w-full" />
   },
 )
