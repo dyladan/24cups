@@ -173,7 +173,7 @@ func (s *Server) CheckTurnstile(ctx context.Context) error {
 func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) error {
 	cfg := map[string]any{}
 	if s.wa != nil {
-		cfg["passkeys"] = true
+		cfg["passkeyRpId"] = s.wa.Config.RPID
 	}
 	if s.turnstile.enabled() {
 		cfg["turnstileSiteKey"] = s.turnstile.SiteKey

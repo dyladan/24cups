@@ -23,7 +23,8 @@ export interface Passkey {
 }
 
 export interface SecurityInfo {
-  passkeysEnabled: boolean
+  /** Set when passkeys are on; they only work on this hostname. */
+  passkeyRpId?: string
   hasPassword: boolean
   passkeys: Passkey[]
   recoveryCodesLeft: number
@@ -242,8 +243,8 @@ export const meQuery = queryOptions({
 export const configQuery = queryOptions({
   queryKey: ['config'],
   /** devToday (YYYY-MM-DD) is set when the server runs with -dev-day. */
-  /** passkeys is true when the server has passkeys configured. */
-  queryFn: () => api<{ turnstileSiteKey?: string; devToday?: string; passkeys?: boolean }>('/config'),
+  /** passkeyRpId is the hostname passkeys are bound to, when they are on. */
+  queryFn: () => api<{ turnstileSiteKey?: string; devToday?: string; passkeyRpId?: string }>('/config'),
   staleTime: 5 * 60_000,
 })
 

@@ -56,6 +56,15 @@ export async function passkeyLogin(): Promise<User> {
 /** Whether this browser can create passkeys at all. */
 export const passkeysSupported = typeof window !== 'undefined' && !!window.PublicKeyCredential
 
+/**
+ * Whether to offer passkeys on this page: the server has them on, the browser
+ * supports them, and we're on the hostname they're bound to (anywhere else,
+ * e.g. a LAN or tailnet address, the browser would refuse the ceremony).
+ */
+export function passkeysUsableHere(rpId: string | undefined): boolean {
+  return !!rpId && passkeysSupported && window.location.hostname === rpId
+}
+
 /** A starting name for a new passkey, from the device it's made on. */
 export function defaultPasskeyName(): string {
   const ua = navigator.userAgent

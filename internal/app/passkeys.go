@@ -530,14 +530,17 @@ type passkeyInfo struct {
 }
 
 type securityInfo struct {
-	PasskeysEnabled   bool          `json:"passkeysEnabled"`
+	PasskeyRPID       string        `json:"passkeyRpId,omitempty"` // empty when passkeys are off
 	HasPassword       bool          `json:"hasPassword"`
 	Passkeys          []passkeyInfo `json:"passkeys"`
 	RecoveryCodesLeft int           `json:"recoveryCodesLeft"`
 }
 
 func (s *Server) loadSecurity(ctx context.Context, userID int64) (*securityInfo, error) {
-	info := &securityInfo{PasskeysEnabled: s.wa != nil, Passkeys: []passkeyInfo{}}
+	info := &securityInfo{Passkeys: []passkeyInfo{}}
+	if s.wa != nil {
+		info.PasskeyRPID = s.wa.Config.RPID
+	}
 	if err := s.rdb.QueryRowContext(ctx, `
 		SELECT password_hash != '', (SELECT COUNT(*) FROM recovery_codes WHERE user_id = u.id)
 		FROM users u WHERE id = ?`, userID).Scan(&info.HasPassword, &info.RecoveryCodesLeft); err != nil {

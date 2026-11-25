@@ -19,7 +19,7 @@ import {
 import { ErrorText, Field, PageHeader, RatioInput, Segmented, Spinner, SuggestInput, TempInput, TimeInput } from '../components/ui'
 import { formatDate, formatRatio, formatTemp, formatTime, plural } from '../lib/format'
 import { RecoveryCodes } from '../components/RecoveryCodes'
-import { addPasskey, defaultPasskeyName, passkeysSupported } from '../lib/passkeys'
+import { addPasskey, defaultPasskeyName, passkeysUsableHere } from '../lib/passkeys'
 import { useThemePref, type ThemePref } from '../lib/theme'
 import { useLogout } from '../lib/logout'
 
@@ -175,7 +175,7 @@ function SignInSecurity({ me }: { me: User }) {
   const regen = useApiMutation(() => api<{ recoveryCodes: string[] }>('/me/recovery-codes', { method: 'POST' }))
 
   if (!sec) return null
-  const passkeys = sec.passkeysEnabled && passkeysSupported
+  const passkeys = passkeysUsableHere(sec.passkeyRpId)
 
   if (codes) {
     return (

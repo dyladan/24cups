@@ -6,7 +6,7 @@ import { api, configQuery, type User } from '../api'
 import { RecoveryCodes } from '../components/RecoveryCodes'
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile'
 import { Blossom, ErrorText, Field, Segmented } from '../components/ui'
-import { defaultPasskeyName, passkeyLogin, passkeySignup, passkeysSupported } from '../lib/passkeys'
+import { defaultPasskeyName, passkeyLogin, passkeySignup, passkeysUsableHere } from '../lib/passkeys'
 
 const loginApi = getRouteApi('/login')
 const registerApi = getRouteApi('/register')
@@ -78,7 +78,7 @@ function Divider({ children }: { children: React.ReactNode }) {
 
 function usePasskeysAvailable() {
   const { data: config } = useQuery(configQuery)
-  return !!config?.passkeys && passkeysSupported
+  return passkeysUsableHere(config?.passkeyRpId)
 }
 
 export function LoginPage() {
