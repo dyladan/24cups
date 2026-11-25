@@ -17,15 +17,15 @@ function Distribution({ dist }: { dist: number[] }) {
   const max = Math.max(1, ...dist)
   return (
     <div>
-      <div className="flex h-24 items-end gap-1" aria-label="Rating distribution">
+      <div className="flex h-24 items-end gap-0.5" aria-label="Rating distribution">
         {dist.map((n, i) => (
-          <div key={i} className="flex h-full flex-1 flex-col items-center justify-end" title={`${(i + 1) / 2}★: ${n}`}>
+          <div key={i} className="flex h-full flex-1 flex-col items-center justify-end" title={`${(i + 1) / 4}★: ${n}`}>
             <div className={clsx('w-full rounded-t-sm', n ? 'bg-gold' : 'bg-line')} style={{ height: `${Math.max(4, (n / max) * 100)}%` }} />
           </div>
         ))}
       </div>
       <div className="mt-1 flex justify-between text-[0.6rem] text-ink-3">
-        <span>½★</span>
+        <span>¼★</span>
         <span>5★</span>
       </div>
     </div>

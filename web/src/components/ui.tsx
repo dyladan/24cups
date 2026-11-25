@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import clsx from 'clsx'
-import { Star, StarHalf, X } from 'lucide-react'
+import { Star, X } from 'lucide-react'
 import { cToF, fToC, formatTime, parseTime, round } from '../lib/format'
 
 // ---------- layout bits ----------
@@ -113,7 +113,7 @@ export function Stars({ value, size = 16, className }: { value: number | null | 
   )
 }
 
-/** Half-star rating input; value is 1–10 (half-stars) or null. */
+/** Quarter-star rating input; value is 1–20 (quarter-stars) or null. */
 export function StarInput({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
   const [hover, setHover] = useState<number | null>(null)
   const shown = hover ?? value ?? 0
@@ -121,37 +121,34 @@ export function StarInput({ value, onChange }: { value: number | null; onChange:
     <div className="flex items-center gap-3">
       <div className="flex" onMouseLeave={() => setHover(null)} role="radiogroup" aria-label="Rating">
         {[1, 2, 3, 4, 5].map((i) => {
-          const full = shown >= i * 2
-          const half = !full && shown >= i * 2 - 1
+          const fill = Math.max(0, Math.min(4, shown - (i - 1) * 4)) / 4
           return (
             <span key={i} className="relative size-10 text-gold sm:size-9">
-              {full ? (
-                <Star className="size-full" fill="currentColor" strokeWidth={0} />
-              ) : half ? (
-                <span className="relative block size-full">
-                  <Star className="absolute inset-0 size-full text-line" fill="currentColor" strokeWidth={0} />
-                  <StarHalf className="absolute inset-0 size-full" fill="currentColor" strokeWidth={0} />
-                </span>
-              ) : (
-                <Star className="size-full text-line" fill="currentColor" strokeWidth={0} />
-              )}
-              {[i * 2 - 1, i * 2].map((v, j) => (
-                <button
-                  key={v}
-                  type="button"
-                  role="radio"
-                  aria-checked={value === v}
-                  aria-label={`${v / 2} stars`}
-                  className={clsx('absolute inset-y-0 w-1/2', j === 0 ? 'left-0' : 'right-0')}
-                  onMouseEnter={() => setHover(v)}
-                  onClick={() => onChange(v)}
-                />
-              ))}
+              <Star className="absolute inset-0 size-full text-line" fill="currentColor" strokeWidth={0} />
+              <span className="absolute inset-0 overflow-hidden" style={{ width: `${fill * 100}%` }}>
+                <Star className="size-10 sm:size-9" fill="currentColor" strokeWidth={0} />
+              </span>
+              {[1, 2, 3, 4].map((q) => {
+                const v = (i - 1) * 4 + q
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    role="radio"
+                    aria-checked={value === v}
+                    aria-label={`${v / 4} stars`}
+                    className="absolute inset-y-0 w-1/4"
+                    style={{ left: `${(q - 1) * 25}%` }}
+                    onMouseEnter={() => setHover(v)}
+                    onClick={() => onChange(v)}
+                  />
+                )
+              })}
             </span>
           )
         })}
       </div>
-      <span className="w-10 text-sm font-semibold tabular-nums">{shown ? (shown / 2).toFixed(1) : '—'}</span>
+      <span className="w-10 text-sm font-semibold tabular-nums">{shown ? (shown / 4).toFixed(2) : '—'}</span>
       {value != null && (
         <button type="button" className="text-ink-3 hover:text-ink" onClick={() => onChange(null)} aria-label="Clear rating">
           <X size={16} />

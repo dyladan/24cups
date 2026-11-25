@@ -27,7 +27,7 @@ export function BrewCard({ brew, showCoffee = false, showUser = true }: { brew: 
           <p className="text-xs text-ink-3">{formatDate(brew.brewedAt)}</p>
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1">
-          {brew.rating != null ? <Stars value={brew.rating / 2} size={15} /> : <span className="text-xs text-ink-3">Unrated</span>}
+          {brew.rating != null ? <Stars value={brew.rating / 4} size={15} /> : <span className="text-xs text-ink-3">Unrated</span>}
           <div className="flex items-center gap-2 text-ink-3">
             {!brew.isPublic && (
               <span title="Private brew">

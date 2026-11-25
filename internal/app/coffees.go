@@ -57,7 +57,7 @@ type CoffeePreview struct {
 
 type CoffeeDetail struct {
 	Coffee
-	Distribution []int        `json:"distribution,omitempty"` // index 0 = ½★ … 9 = 5★
+	Distribution []int        `json:"distribution,omitempty"` // index 0 = ¼★ … 19 = 5★
 	GroupStats   []GroupStats `json:"groupStats,omitempty"`
 	// Flavors is nil on sealed doors; while tasting blind it has only the
 	// taster count.
@@ -183,7 +183,7 @@ func (s *Server) loadCoffees(ctx context.Context, u *User, onlyID int64, today i
 			c.Opened, c.Favorited = u.anonCanSee(c.Day), false
 		}
 		if myAvg != nil {
-			v := *myAvg / 2
+			v := *myAvg / ratingUnits
 			c.MyAvg = &v
 		}
 		// myAvg is non-nil exactly when the user has a rated brew.

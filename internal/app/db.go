@@ -235,6 +235,14 @@ CREATE TABLE recovery_codes (
 	PRIMARY KEY (user_id, code_hash)
 );
 `,
+	// v7: quarter-star ratings. rating moves from 1–10 (half-stars) to 1–20
+	// (quarter-stars); SQLite can't alter a CHECK, so swap in a new column.
+	`
+ALTER TABLE brews ADD COLUMN rating_q INTEGER CHECK (rating_q IS NULL OR rating_q BETWEEN 1 AND 20);
+UPDATE brews SET rating_q = rating * 2;
+ALTER TABLE brews DROP COLUMN rating;
+ALTER TABLE brews RENAME COLUMN rating_q TO rating;
+`,
 }
 
 func migrate(db *sql.DB) error {

@@ -24,7 +24,7 @@ func groundTruth(t *testing.T, s *Server) map[int64]Stats {
 		var avg float64
 		var st Stats
 		rows.Scan(&id, &avg, &st.RatingCount, &st.BrewCount)
-		a := avg / 2
+		a := avg / ratingUnits
 		st.AvgRating = &a
 		out[id] = st
 	}
@@ -64,7 +64,7 @@ func TestStatsStoreMatchesDatabase(t *testing.T) {
 		coffee := rng.Intn(2) + 1
 		pub := rng.Intn(2) == 0
 		excl := rng.Intn(2) == 0
-		body := fmt.Sprintf(`{"coffeeId":%d,"method":"V60","ratio":16,"rating":%d,"isPublic":%t,"excludeFromGlobal":%t}`, coffee, rng.Intn(10)+1, pub, excl)
+		body := fmt.Sprintf(`{"coffeeId":%d,"method":"V60","ratio":16,"rating":%d,"isPublic":%t,"excludeFromGlobal":%t}`, coffee, rng.Intn(maxRating)+1, pub, excl)
 		switch op := rng.Intn(7); {
 		case op <= 2:
 			var b Brew

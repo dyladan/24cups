@@ -30,7 +30,7 @@ type Brew struct {
 	Burrset      string `json:"burrset"`
 	GrindSetting string `json:"grindSetting"`
 
-	Rating            *int     `json:"rating"` // 1–10 half-stars
+	Rating            *int     `json:"rating"` // 1–20 quarter-stars
 	Notes             string   `json:"notes"`
 	Descriptors       []string `json:"descriptors"` // normalized lowercase flavor tags
 	IsPublic          bool     `json:"isPublic"`
@@ -186,8 +186,8 @@ func (s *Server) readBrew(w http.ResponseWriter, r *http.Request, u *User) (*bre
 	if in.ActualTimeS != nil && (*in.ActualTimeS < 0 || *in.ActualTimeS > 86400*2) {
 		return nil, "", errf(400, "brew time is out of range")
 	}
-	if in.Rating != nil && (*in.Rating < 1 || *in.Rating > 10) {
-		return nil, "", errf(400, "rating must be between ½ and 5 stars")
+	if in.Rating != nil && (*in.Rating < 1 || *in.Rating > maxRating) {
+		return nil, "", errf(400, "rating must be between ¼ and 5 stars")
 	}
 	var err error
 	if in.GrindSetting, err = trimMax("grind setting", in.GrindSetting, 40); err != nil {

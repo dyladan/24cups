@@ -78,11 +78,11 @@ func TestRatingsAndSpoilers(t *testing.T) {
 	b.do("POST", "/auth/register", `{"username":"bob","password":"password1"}`, nil)
 
 	// Alice: two public brews (avg 4.0 stars) and an excluded private one.
-	a.do("POST", "/brews", `{"coffeeId":1,"method":"V60","ratio":16,"rating":10,"isPublic":true}`, nil)
-	a.do("POST", "/brews", `{"coffeeId":1,"method":"V60","ratio":16,"rating":6,"isPublic":true}`, nil)
+	a.do("POST", "/brews", `{"coffeeId":1,"method":"V60","ratio":16,"rating":20,"isPublic":true}`, nil)
+	a.do("POST", "/brews", `{"coffeeId":1,"method":"V60","ratio":16,"rating":12,"isPublic":true}`, nil)
 	a.do("POST", "/brews", `{"coffeeId":1,"method":"V60","ratio":16,"rating":1,"isPublic":false,"excludeFromGlobal":true}`, nil)
 	// Bob: a private brew that still counts (2.0 stars).
-	b.do("POST", "/brews", `{"coffeeId":1,"method":"V60","ratio":16,"rating":4,"isPublic":false}`, nil)
+	b.do("POST", "/brews", `{"coffeeId":1,"method":"V60","ratio":16,"rating":8,"isPublic":false}`, nil)
 
 	var c CoffeeDetail
 	a.do("GET", "/coffees/1", "", &c)

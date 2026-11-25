@@ -19,11 +19,17 @@ type statsStore struct {
 	refreshMu sync.Mutex
 }
 
+// Ratings are stored in quarter-stars: 1 = ¼★ … 20 = 5★.
+const (
+	ratingUnits = 4 // stored units per star
+	maxRating   = 5 * ratingUnits
+)
+
 // pairStat is one user's included ratings for one coffee.
 type pairStat struct {
 	n    int
 	sum  int
-	hist [10]int
+	hist [maxRating]int
 }
 
 type coffeeAgg struct {
@@ -35,9 +41,9 @@ type coffeeAgg struct {
 	flavors map[int64]map[string]struct{}
 
 	// derived from pairs
-	avgSum    float64 // sum of per-user averages (1–10 scale)
+	avgSum    float64 // sum of per-user averages (1–20 scale)
 	brewCount int
-	hist      [10]int
+	hist      [maxRating]int
 }
 
 func newCoffeeAgg() *coffeeAgg {
@@ -45,7 +51,7 @@ func newCoffeeAgg() *coffeeAgg {
 }
 
 func (a *coffeeAgg) recompute() {
-	a.avgSum, a.brewCount, a.hist = 0, 0, [10]int{}
+	a.avgSum, a.brewCount, a.hist = 0, 0, [maxRating]int{}
 	for _, p := range a.pairs {
 		a.avgSum += float64(p.sum) / float64(p.n)
 		a.brewCount += p.n
@@ -213,7 +219,7 @@ func setMember(m map[int64]struct{}, id int64, in bool) {
 func (a *coffeeAgg) stats() *Stats {
 	st := &Stats{RatingCount: len(a.pairs), BrewCount: a.brewCount, Opens: len(a.opens), Favorites: len(a.favs)}
 	if len(a.pairs) > 0 {
-		avg := a.avgSum / float64(len(a.pairs)) / 2
+		avg := a.avgSum / float64(len(a.pairs)) / ratingUnits
 		st.AvgRating = &avg
 	}
 	return st
@@ -233,7 +239,7 @@ func (s *statsStore) all() map[int64]*Stats {
 func (s *statsStore) distribution(coffeeID int64) []int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	d := make([]int, 10)
+	d := make([]int, maxRating)
 	if a := s.coffees[coffeeID]; a != nil {
 		copy(d, a.hist[:])
 	}
@@ -262,7 +268,7 @@ func (s *statsStore) forUsers(users []int64) map[int64]*Stats {
 			}
 		}
 		if st.RatingCount > 0 {
-			avg := avgSum / float64(st.RatingCount) / 2
+			avg := avgSum / float64(st.RatingCount) / ratingUnits
 			st.AvgRating = &avg
 		}
 		out[id] = st
