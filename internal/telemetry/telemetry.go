@@ -63,7 +63,7 @@ func Setup(ctx context.Context, version string) (shutdown func(context.Context) 
 
 	// Defaults first; OTEL_SERVICE_NAME / OTEL_RESOURCE_ATTRIBUTES (FromEnv)
 	// come last so operators can override anything. host.name is always set:
-	// a collector may otherwise guess (pi-nas labels host-less logs as HA).
+	// without it, a collector may guess or mislabel the source of the data.
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceName(ServiceName),
