@@ -130,7 +130,7 @@ function InviteBox({ g }: { g: Group }) {
   async function copy() {
     try {
       if (navigator.share && matchMedia('(pointer: coarse)').matches) {
-        await navigator.share({ title: `Join ${g.name} on Advent Cup`, url: link })
+        await navigator.share({ title: `Join ${g.name} on Onyx Advent`, url: link })
       } else {
         await navigator.clipboard.writeText(link)
         setCopied(true)

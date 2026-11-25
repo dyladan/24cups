@@ -1,4 +1,4 @@
-# Advent Cup behind a Cloudflare Tunnel.
+# Onyx Advent behind a Cloudflare Tunnel.
 #
 #   cp .env.example .env    # then paste your tunnel token into .env
 #   docker compose up -d --build

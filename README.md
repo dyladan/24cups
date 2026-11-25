@@ -1,4 +1,4 @@
-# Advent Cup
+# Onyx Advent
 
 A community app for logging, rating, and comparing the coffees in this year's
 coffee advent calendar. It's independent and **not affiliated with Onyx Coffee
