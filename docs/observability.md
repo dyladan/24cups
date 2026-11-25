@@ -12,7 +12,7 @@ off.
   `http.route`.
 - SQLite queries are child spans (`db.system.name=sqlite`).
 - The Turnstile Siteverify call is a client span, with the outcome in
-  `onyx_advent.turnstile.*` attributes.
+  `twentyfourcups.turnstile.*` attributes.
 - Not traced: static files, `/api/health`, the long-lived `/api/events`
   stream, and queries outside a request (startup).
 
@@ -27,11 +27,11 @@ Full-rate tracing cost about 10% of peak throughput in the
   (`read` / `write`).
 - Go runtime: `go.*`.
 - App:
-  - `onyx_advent.signups`, `onyx_advent.logins` (by `onyx_advent.outcome`)
-  - `onyx_advent.brews.created`
-  - `onyx_advent.rate_limit.rejections` (by `onyx_advent.limiter`)
-  - `onyx_advent.turnstile.verifications`
-  - `onyx_advent.live_updates.streams`
+  - `twentyfourcups.signups`, `twentyfourcups.logins` (by `twentyfourcups.outcome`)
+  - `twentyfourcups.brews.created`
+  - `twentyfourcups.rate_limit.rejections` (by `twentyfourcups.limiter`)
+  - `twentyfourcups.turnstile.verifications`
+  - `twentyfourcups.live_updates.streams`
 
 ## Logs
 
@@ -40,7 +40,7 @@ active span. It still prints to stderr.
 
 ## Resource attributes
 
-`service.name=onyx-advent`, `service.version` (from the `VERSION` build arg),
+`service.name=24cups`, `service.version` (from the `VERSION` build arg),
 `host.name`, and `deployment.environment.name` from `OTEL_RESOURCE_ATTRIBUTES`.
 
 ## With Docker Compose

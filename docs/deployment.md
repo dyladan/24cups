@@ -8,7 +8,7 @@ fine on a Raspberry Pi.
 
 | Service | What it does |
 |---|---|
-| `app` | The Onyx Advent server. Publishes no ports. |
+| `app` | The 24 Cups server. Publishes no ports. |
 | `cloudflared` | Carries traffic from Cloudflare to the app. |
 | `litestream` | Streams every database change to R2. |
 | `litestream-restore` | Runs once at startup and restores the database from R2 if the volume is empty. |
@@ -77,7 +77,7 @@ container streams every committed change to R2 with
 7 days of history (`litestream.yml`).
 
 **Setup:** in the Cloudflare dashboard → R2, create a bucket (e.g.
-`onyx-advent-backups`), then an API token with **Object Read & Write** limited
+`24cups-backups`), then an API token with **Object Read & Write** limited
 to that bucket. Put the account ID, bucket, access key ID and secret in `.env`.
 
 **Automatic restore:** before the app starts, `litestream-restore` checks the

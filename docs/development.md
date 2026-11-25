@@ -8,7 +8,7 @@ TanStack Router, TanStack Query, Tailwind v4). The built frontend is embedded
 in a single static binary.
 
 ```
-cmd/onyx-advent/     entry point and flags
+cmd/24cups/     entry point and flags
 internal/app/        HTTP API, database, rules, rate limits
 internal/telemetry/  OpenTelemetry setup
 web/                 React frontend
@@ -31,14 +31,14 @@ frontend, so you can try the calendar outside December.
 To build and run the single binary:
 
 ```sh
-make build && ./onyx-advent -db advent.db   # http://localhost:8080
+make build && ./24cups -db advent.db   # http://localhost:8080
 ```
 
 Or with Docker (local only; see [deployment.md](deployment.md) for a real
 deployment):
 
 ```sh
-docker build -t onyx-advent . && docker run -p 8080:8080 -v advent-data:/data onyx-advent
+docker build -t 24cups . && docker run -p 8080:8080 -v advent-data:/data 24cups
 ```
 
 ## Tests

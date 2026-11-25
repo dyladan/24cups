@@ -1,10 +1,10 @@
-# Onyx Advent
+# 24 Cups
 
 A place to compare notes on this year's coffee advent calendar. Open a door
 each morning, log how you brewed it, rate it, and see what everyone else
 thought.
 
-Onyx Advent is an independent, community-run project. It is **not affiliated
+24 Cups is an independent, community-run project. It is **not affiliated
 with Onyx Coffee Lab or Fellow**.
 
 ![The calendar, eleven doors in](docs/screenshots/calendar.png)

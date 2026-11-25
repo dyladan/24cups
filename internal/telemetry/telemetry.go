@@ -28,7 +28,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 )
 
-const ServiceName = "onyx-advent"
+const ServiceName = "24cups"
 
 // Enabled reports whether telemetry should be exported, from the standard
 // environment variables.

@@ -136,7 +136,7 @@ func routeOf(pattern string) string {
 // http.server.request.duration metrics. Static files, health checks and the
 // long-lived live-update stream are excluded.
 func (s *Server) Handler() http.Handler {
-	return otelhttp.NewHandler(s, "onyx-advent",
+	return otelhttp.NewHandler(s, "24cups",
 		otelhttp.WithFilter(func(r *http.Request) bool {
 			p := r.URL.Path
 			return strings.HasPrefix(p, "/api/") && p != "/api/health" && p != "/api/events"

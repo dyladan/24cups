@@ -1,4 +1,4 @@
-# Onyx Advent behind a Cloudflare Tunnel.
+# 24 Cups behind a Cloudflare Tunnel.
 #
 #   cp .env.example .env    # then paste your tunnel token into .env
 #   docker compose up -d --build
@@ -8,7 +8,7 @@
 # The app has no published ports. Its "outbound" network lets it call
 # Cloudflare Siteverify (sign-up bot check) and the host's OTel collector.
 
-name: onyx-advent # project name: volumes are onyx-advent_*, regardless of directory
+name: 24cups # project name: volumes are 24cups_*, regardless of directory
 
 services:
   app:
@@ -16,7 +16,7 @@ services:
       context: .
       args:
         VERSION: ${VERSION:-dev} # e.g. VERSION=$(git rev-parse --short HEAD)
-    image: onyx-advent:latest
+    image: 24cups:latest
     restart: unless-stopped
     environment:
       # Real visitor IPs for rate limiting. Safe only because the app is
@@ -31,7 +31,7 @@ services:
       TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
       # OpenTelemetry (standard OTEL_* variables). Off unless an endpoint is
       # set in .env, e.g. the host's collector at http://host.docker.internal:4318.
-      OTEL_SERVICE_NAME: onyx-advent
+      OTEL_SERVICE_NAME: 24cups
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_EXPORTER_OTLP_PROTOCOL: http/protobuf
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta # Dynatrace needs delta

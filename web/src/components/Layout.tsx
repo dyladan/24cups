@@ -20,7 +20,7 @@ export function Logo() {
     <Link to="/" className="flex items-center gap-2.5">
       <img src="/favicon.svg" alt="" className="size-8" />
       <span className="display text-xl leading-none">
-        Onyx<span className="text-accent"> Advent</span>
+        24<span className="text-accent"> Cups</span>
       </span>
     </Link>
   )
@@ -96,7 +96,7 @@ export function Layout() {
 
       <footer className="border-t border-gold/40 pb-24 md:pb-0">
         <div className="mx-auto max-w-6xl px-4 py-6 text-xs leading-relaxed text-ink-3 sm:px-6">
-          Onyx Advent is an independent, community-run project for comparing notes on this year’s coffee advent calendar.
+          24 Cups is an independent, community-run project for comparing notes on this year’s coffee advent calendar.
           It is not affiliated with, endorsed by, or sponsored by Onyx Coffee Lab or Fellow. All trademarks belong to
           their respective owners.
         </div>
