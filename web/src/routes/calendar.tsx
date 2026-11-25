@@ -7,6 +7,7 @@ import { useCoffeeView, useToday, useTodayPeek, type CoffeeView } from '../lib/a
 import { PeekButton, usePeek } from '../components/Peek'
 import { Blossom, ErrorText, PageHeader, Spinner, TastingNotes } from '../components/ui'
 import { formatRating } from '../lib/format'
+import { ONYX_URL } from '../lib/links'
 
 /** Shown instead of scores while a coffee is still blind for this user. */
 export function BlindRow({ stats, className, anon }: { stats: Stats | null; className?: string; anon?: boolean }) {
@@ -241,10 +242,15 @@ export function CalendarPage() {
       </PageHeader>
       {anon && (
         <p className="-mt-3 mb-6 max-w-2xl text-sm text-ink-2">
-          A community log for this year’s coffee advent calendar. Past days show everything: tasting notes, ratings and brews.
-          Today’s door shows just its name so members who haven’t opened it yet aren’t spoiled: Peek at it to see
-          everything, or switch on <span className="font-semibold">Spoilers</span> at the top. Peek at a later door for just
-          its name.
+          Community ratings for the{' '}
+          <a href={ONYX_URL} target="_blank" rel="noopener noreferrer" className="font-semibold text-ink underline decoration-gold underline-offset-2 hover:decoration-2">
+            2026 Onyx Coffee Lab advent calendar
+          </a>
+          . 24 coffees, one behind each door. Explore the list or{' '}
+          <Link to="/login" className="font-semibold text-ink underline decoration-gold underline-offset-2 hover:decoration-2">
+            sign in
+          </Link>{' '}
+          to rate brews.
         </p>
       )}
       <div className="mb-6 h-1.5 overflow-hidden rounded-full bg-paper-2">

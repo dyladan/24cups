@@ -6,6 +6,7 @@ import { meQuery } from '../api'
 import { useLiveUpdates } from '../lib/live'
 import { useLogout } from '../lib/logout'
 import { useAnonSpoilers } from '../lib/anon'
+import { ONYX_URL } from '../lib/links'
 
 const nav = [
   { to: '/', label: 'Calendar', icon: CalendarDays },
@@ -96,7 +97,11 @@ export function Layout() {
 
       <footer className="border-t border-gold/40 pb-24 md:pb-0">
         <div className="mx-auto max-w-6xl px-4 py-6 text-xs leading-relaxed text-ink-3 sm:px-6">
-          24 Cups is an independent, community-run project for comparing notes on this year’s coffee advent calendar.
+          24 Cups is an independent, community-run project for comparing notes on the{' '}
+          <a href={ONYX_URL} target="_blank" rel="noopener noreferrer" className="underline decoration-gold underline-offset-2 hover:text-ink">
+            2026 Onyx Coffee Lab advent calendar
+          </a>
+          .{' '}
           It is not affiliated with, endorsed by, or sponsored by Onyx Coffee Lab or Fellow. All trademarks belong to
           their respective owners.
         </div>
