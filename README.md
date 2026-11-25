@@ -1,263 +1,78 @@
 # Onyx Advent
 
-A community app for logging, rating, and comparing the coffees in this year's
-coffee advent calendar. It's independent and **not affiliated with Onyx Coffee
-Lab or Fellow**.
+A place to compare notes on this year's coffee advent calendar. Open a door
+each morning, log how you brewed it, rate it, and see what everyone else
+thought.
 
-- **Calendar**: one door per day. Unopened doors hide the coffee. You can open
-  a door without logging a brew.
-- **Signed-out visitors** see everything for days before today: coffee,
-  tasting notes, ratings and public brews. Today's door stays sealed, so a
-  member browsing signed out isn't spoiled before opening it, unless they flip the
-  **Spoilers** switch in the header (saved on the device) or Peek at that door.
-  Today's coffee name and origin aren't spoilers: everyone, signed in or not,
-  sees them on today's sealed door. Later doors are
-  always sealed. "Today" is the visitor's local date, capped at the date in
-  UTC+14 so a faked clock can't unlock doors early. The December is set with
-  `-calendar-year` / `CALENDAR_YEAR`.
-- **Blind tasting** (default): after opening a coffee, its tasting notes,
-  community scores and other people's brews stay hidden until you log a rated
-  brew or tap "Reveal now". This is enforced by the API, not just the UI. Profile → Spoilers can
-  switch this to "once opened" or "always" (scores even on sealed doors).
-- **Brews**: coffee + recipe (equipment, ratio, temp, target time) + actual time,
-  grinder, burrs, grind setting, half-star rating, notes. Brews are public or private.
-  Private brews can be excluded from the global ratings.
-- **Flavors**: tag what you tasted on each brew (up to 10), picked from the
-  SCA/WCR flavor wheel's groups and terms (plus common roaster notes, mouthfeel
-  words and an "Off-flavors" group) or typed freely. The coffee page ranks the most
-  common flavors by share of tasters: each person's tags across their brews
-  count once. The list appears once 3 people have tagged a coffee, typed-in
-  flavors appear once 2 people use them, and it's a spoiler like the scores
-  (hidden while tasting blind). Counting follows the same public/excluded rules
-  as ratings.
-- **Presets and grinders**: save recipe presets and grinders on your profile. Each
-  grinder can have several burrsets. Common models and burrs are suggested, and
-  you can type a custom value for anything.
-- **Ratio entry**: `1:X`, `g in / mL out`, or `g/L`, all stored as one ratio.
-- **Groups**: public (discoverable) or private (invite link or code). Each group
-  has its own leaderboard and brew feed. A user can belong to many groups.
-  Members can set a display name for each group, shown only on that group's
-  page; it can't match another member's group or profile name.
-- **Rankings**: opened coffees ranked by community average, your own average, or favorites.
+Onyx Advent is an independent, community-run project. It is **not affiliated
+with Onyx Coffee Lab or Fellow**.
 
-Global averages are computed **per user first** (each user's included brews are
-averaged), then averaged across users, so one prolific brewer can't skew a coffee.
+![The calendar, eleven doors in](docs/screenshots/calendar.png)
 
-## Abuse protection
+## What you can do
 
-Built in (defaults in `DefaultLimits`, `internal/app/ratelimit.go`):
+**Open a door a day.** The calendar works like the real one: each coffee stays
+hidden behind its door until you open it, and future days stay sealed. Signed
+out, you can browse past days without an account.
 
-| What | Limit |
-|---|---|
-| All API requests | 30/s per IP (burst 150), 15/s per signed-in user (burst 75) |
-| Changes (brews, groups, …) | 1/s per user (burst 20) |
-| Sign-up | 5 per hour per IP |
-| Sign-in | 10/min per IP; 10 failures per 15 min per username, from any IP |
-| Failed sign-in | ~1 s delay; unknown usernames take the same time |
-| Password hashing | at most 3 at once, then "busy" (bcrypt is the costliest thing an anonymous client can trigger) |
-| Live-update streams | 10 per user, 40 per IP |
-| Content per user | 30 brews per coffee, 50 presets, 20 grinders, 10 owned groups |
-| Requests | 64 KB bodies, 32 KB headers |
+**Taste blind if you want to.** After you open a door, the tasting notes,
+community scores and other people's brews stay hidden until you've rated it
+yourself, so your first sip isn't swayed by anyone else. Prefer to see
+everything? Turn it off in your profile.
 
-Limited requests get HTTP 429 with `Retry-After` and a readable message.
+![A coffee page with community scores and what people taste](docs/screenshots/coffee.png)
 
-**Behind a proxy or tunnel, set `CLIENT_IP_HEADER=CF-Connecting-IP`.**
-Otherwise every visitor appears to come from the proxy and shares one
-bucket. Only set it if the app's port isn't reachable except through
-Cloudflare: anyone who can reach the port directly could fake the header. In
-Docker, don't publish the port; attach the container to the proxy network
-only. IPv6 clients are grouped by /64.
+**Log your brews.** Record the method, dose and ratio, water temperature,
+grinder and grind setting, how long it took, a half-star rating, and what you
+tasted. Pick flavors from the coffee flavor wheel or type your own. Save your
+usual recipes and grinders so logging takes seconds. Brews can be public or
+private.
 
-Suggested Cloudflare settings (dashboard, free plan):
-- Keep DDoS protection on (automatic) and use "Under Attack" mode only during an active attack.
-- Add a WAF rate-limiting rule for paths starting with `/api/auth/` as an outer layer.
-- Bot Fight Mode can challenge real browsers' API and live-update requests. Test before relying on it.
-- Turnstile protects sign-up (see Deploying).
+![Logging a brew](docs/screenshots/brew-form.png)
 
-## Live updates
+**See how everyone rates them.** Each coffee shows its community score, a
+rating spread, and the flavors people pick out most often. Scores are
+averaged per person first, so one enthusiastic brewer can't tip the
+rankings. The Rankings page puts every coffee you've opened in order by the
+community's average, yours, or favorites.
 
-Pages update in near real time over Server-Sent Events (`GET /api/events`).
-Events carry no data, only hints like "coffee data changed", which tell the
-browser which cached queries to refetch through the normal API. Privacy rules
-therefore apply exactly as they do for any other request. Your own changes
-aren't echoed back to the tab that made them; recipe, grinder, settings and
-my-brews hints go only to your own devices. A tab refetches everything after
-reconnecting.
+![Rankings](docs/screenshots/rankings.png)
 
-If you put a proxy in front, it must not buffer `text/event-stream` responses.
-Caddy and Cloudflare Tunnel work as is; nginx honors the `X-Accel-Buffering: no`
-header the server sends. Over plain HTTP/1.1, browsers allow about 6
-connections per site, so serve over HTTPS (HTTP/2) if people keep many tabs open.
+**Taste along with friends.** Make a group for your household, office or
+coffee club. Groups can be public or invite-only, and each has its own
+leaderboard and brew feed.
 
-## Performance
+![A group page](docs/screenshots/group.png)
 
-Community stats (averages, opens, favorites, rating distributions, group
-leaderboards) are kept in memory. They're loaded at startup and updated
-after each write by re-reading only the affected user/coffee pair, so page
-views never scan the brews table. Reads use a pool of read-only SQLite
-connections; writes go through a single connection.
+It works well on a phone, updates live as people post, and has a dark mode.
 
-Benchmarks run with `-no-rate-limits` (one load generator = one IP).
-Measured on a Raspberry Pi 5 (4 GB) with Dec-24-sized data, with the load
-generator on the same Pi limited to 1–2 cores:
+<img src="docs/screenshots/mobile-dark.png" alt="The calendar on a phone in dark mode" width="320">
 
-| Scenario | Result |
-|---|---|
-| Mixed API traffic, 500 / 2,000 / 5,000 users | ~2,900 / 2,850 / 2,700 req/s, p95 ≈ 11 ms, no errors |
-| 2,000 open pages + 2 brews/s (live-update refetch storm) | ~2,000 refetches/s, p95 2.7 ms, p99 9.5 ms, ≤ 1.2 cores |
-| Memory | ~80 MB at 5,000 users; ~310 MB with 2,000 open live streams |
+## A note on spoilers
 
-## Observability (OpenTelemetry)
+The app only reveals coffees as their days come, but this repository has the
+whole lineup in `data/coffees.json`. If you want to be surprised, don't open
+that file. The screenshots above use made-up coffees.
 
-Traces, metrics and logs are exported over OTLP. They're configured only
-with the standard `OTEL_*` environment variables, and off unless an
-endpoint is set (`OTEL_SDK_DISABLED=true` also turns them off).
+## Running your own
 
-- **Traces:** a server span per API request, named by route (e.g.
-  `GET /api/coffees/{id}`, stable HTTP semantic conventions with `http.route`). SQLite
-  queries are child spans (`db.system.name=sqlite`), and the Turnstile
-  Siteverify call is a client span. Static files, `/api/health` and the
-  long-lived `/api/events` stream aren't traced; neither are queries outside
-  a request (startup). Sampling: `OTEL_TRACES_SAMPLER(_ARG)`.
-- **Metrics:** `http.server.request.duration` and body sizes,
-  `db.client.operation.duration` and `db.sql.connection.*` (per pool:
-  `read`/`write`), Go runtime (`go.*`), and app metrics:
-  `onyx_advent.signups`, `onyx_advent.logins` (`onyx_advent.outcome`),
-  `onyx_advent.brews.created`, `onyx_advent.rate_limit.rejections` (`onyx_advent.limiter`),
-  `onyx_advent.turnstile.verifications`, `onyx_advent.live_updates.streams`.
-- **Logs:** the server's slog output also goes out as OTLP logs, correlated
-  with the active span; it still prints to stderr.
-- **Resource:** `service.name=onyx-advent`, `service.version` (build arg
-  `VERSION`), `host.name`, `deployment.environment.name` from
-  `OTEL_RESOURCE_ATTRIBUTES`.
-
-`compose.yaml` sends metrics with delta temporality (Dynatrace requires it)
-to the collector on the Docker host via `host.docker.internal:4318`.
-Full-rate tracing cost about 10% of peak throughput in the Pi benchmark.
-
-## Stack
-
-Go (net/http, SQLite via pure-Go `modernc.org/sqlite`, bcrypt sessions) serving
-a React + TypeScript SPA (Vite, TanStack Router, TanStack Query, Tailwind v4)
-embedded in a single static binary.
-
-## Deploying (Cloudflare Tunnel)
-
-`compose.yaml` runs the app plus `cloudflared`. The app publishes no ports;
-only cloudflared reaches it, over a private Docker network, so it can trust
-Cloudflare's `CF-Connecting-IP` header for rate limiting. Its separate
-`outbound` network is for calls the app makes: Cloudflare Siteverify and the
-OTel collector.
-
-1. **Create a tunnel.** In the Cloudflare dashboard, go to Zero Trust → Networks →
-   Tunnels → Create a tunnel (Cloudflared). Copy the token from the install
-   command.
-2. **Route a hostname.** In the tunnel's *Public hostnames*, add e.g.
-   `advent.example.com` with service type **HTTP** and URL **`app:8080`**.
-3. **Configure and start:**
-   ```sh
-   cp .env.example .env   # paste the token; .env is git-ignored
-   docker compose up -d --build
-   docker compose ps      # app should be "healthy"
-   ```
-4. **Turnstile (bot check on sign-up):** set `TURNSTILE_SECRET_KEY` and
-   `TURNSTILE_HOSTNAMES` in `.env`. The hostnames must match the widget's
-   domains in the Turnstile dashboard. The site key is public and set in
-   `compose.yaml`. Each sign-up token is verified server-side with Cloudflare
-   Siteverify: it must pass, be for action `signup`, come from an allowed
-   hostname, and not be reused. Any failure or timeout rejects the sign-up.
-   Without a secret, sign-up has no bot check (fine for local development).
-   The app needs outbound access to `challenges.cloudflare.com` (the
-   `outbound` network in compose). At startup it checks this, and that the
-   secret is accepted, logging `turnstile check passed` or `turnstile check
-   failed: …`. Each rejected sign-up logs `turnstile rejected sign-up` with a
-   reason (`unreachable`, `not_success` plus Cloudflare's error codes,
-   `hostname_mismatch`, `action_mismatch`, …), also recorded on the span and
-   in `onyx_advent.turnstile.verifications`.
-5. **Recommended Cloudflare settings** (SSL/TLS → Edge Certificates): Always
-   Use HTTPS on, minimum TLS 1.2, and HSTS once you've confirmed HTTPS works.
-
-**HTTPS:** visitors connect to Cloudflare's edge, which serves a free,
-auto-renewing certificate for your hostname. The hop from Cloudflare to
-cloudflared is an encrypted tunnel that cloudflared opens outbound. The only
-plain-HTTP hop is cloudflared → app, inside Docker's private network on the
-same machine. No origin certificate is needed.
-
-**Data** lives in the `advent-data` volume (`/data/advent.db`) and is
-replicated continuously to Cloudflare R2 by [Litestream](https://litestream.io)
-(see Backups).
-
-## Backups (Litestream → R2)
-
-The `litestream` container streams every committed change to R2. It takes a
-full snapshot daily and keeps 7 days of history (`litestream.yml`).
-
-**Setup:** in the Cloudflare dashboard → R2, create a bucket (e.g.
-`onyx-advent-backups`), then an API token with **Object Read & Write**
-limited to that bucket. Put the account ID, bucket, access key ID and secret
-in `.env` (see `.env.example`).
-
-**Automatic restore:** before the app starts, `litestream-restore` checks
-the volume. If there's no database and R2 has a backup, it restores the
-latest one. To move hosts or recover from a lost disk, `docker compose up`
-with the same `.env` on an empty volume.
-
-**Check replication:**
-```sh
-docker compose logs litestream                               # replication activity / errors
-docker compose run --rm litestream-restore ltx /data/advent.db   # files in R2
-```
-
-**Restore to a point in time** (e.g. undo a bad change), into a separate
-file first:
-```sh
-docker compose run --rm litestream-restore restore \
-  -timestamp 2026-12-10T08:00:00Z -o /data/restored.db /data/advent.db
-# inspect it, then: docker compose stop app litestream,
-# move restored.db over advent.db (remove advent.db-wal/-shm), start again
-```
-
-**Test a restore** now and then, into a scratch path, so you know the
-backups work.
-
-## Running
+It's a single Go binary with an embedded SQLite database, and it's happy on a
+Raspberry Pi. The included Docker Compose setup puts it behind a Cloudflare
+Tunnel with continuous backups to Cloudflare R2.
 
 ```sh
-make build && ./onyx-advent -db advent.db          # http://localhost:8080
-# or
-docker build -t onyx-advent . && docker run -p 8080:8080 -v advent-data:/data onyx-advent   # local only; see Deploying
+cp .env.example .env    # fill in your tunnel token, Turnstile and R2 keys
+docker compose up -d --build
 ```
 
-| Flag / env | Default | |
-|---|---|---|
-| `-addr` / `ADDR` | `:8080` | listen address |
-| `-db` / `DB_PATH` | `advent.db` | SQLite file |
-| `-coffees` / `COFFEES_FILE` | embedded `data/coffees.json` | calendar contents |
-| `-secure-cookies` / `SECURE_COOKIES=true` | false | set when served over HTTPS |
-| `-client-ip-header` / `CLIENT_IP_HEADER` | none | trusted real-IP header, e.g. `CF-Connecting-IP` |
-| `-calendar-year` / `CALENDAR_YEAR` | 2026 | the December the calendar covers |
-| `TURNSTILE_SECRET_KEY` (env only) | none | enables the Turnstile check on sign-up |
-| `-turnstile-site-key` / `TURNSTILE_SITE_KEY` | none | public widget key |
-| `-turnstile-hostnames` / `TURNSTILE_HOSTNAMES` | none | comma-separated allowed hostnames (required with a secret) |
-| `-no-rate-limits` / `NO_RATE_LIMITS=true` | false | benchmarks and `make dev` only |
-| `-dev-day` / `DEV_DAY` | 0 (off) | development only: pretend it's this day of December. `DAY=3 make dev` sets it |
+## Documentation
 
-## Calendar contents
-
-`data/coffees.json` holds the lineup. It's upserted by `day` on every start, so
-you can fix typos without touching the database:
-
-```json
-[{ "day": 1, "name": "…", "origin": "…", "region": "…", "producer": "…",
-   "process": "…", "variety": "…", "elevation": "…", "roastLevel": "…",
-   "tastingNotes": "…", "description": "…" }]
-```
-
-The checked-in file has the 2026 lineup, transcribed from the printed card. Days 5 (Framily) and 13 (Krampus) are blends; their origin is inferred from the listed region.
-
-## Theming
-
-Colors live in CSS variables at the top of `web/src/styles.css`. The light theme follows the 2026 box and lineup card (crimson, gold foil, cream, burgundy); dark mode follows the black puzzle box. Brand marks (the blackletter wordmark and the horse artwork) are deliberately not reproduced.
+- [Deployment](docs/deployment.md): Cloudflare Tunnel, Turnstile, backups and restores
+- [Configuration](docs/configuration.md): every setting, the lineup file, theming
+- [Abuse protection](docs/abuse-protection.md): rate limits and Cloudflare settings
+- [Observability](docs/observability.md): OpenTelemetry traces, metrics and logs
+- [Performance](docs/performance.md): how it scales, and benchmarks
+- [Development](docs/development.md): running locally, tests, and how the rules work
 
 ## License
 

@@ -102,7 +102,7 @@ services:
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      # Set in .env (never committed). See README → Deploying.
+      # Set in .env (never committed). See docs/deployment.md.
       TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
     depends_on:
       app:
