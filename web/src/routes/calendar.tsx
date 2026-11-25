@@ -124,7 +124,7 @@ function SealedDoor({
       <span className="pointer-events-none absolute inset-2 rounded-xl border border-door-ink/25" />
       <div className="pointer-events-none relative flex items-start justify-between">
         <span className="text-[0.62rem] font-semibold uppercase tracking-[0.3em] opacity-80">
-          {today ? 'Today' : 'Day'}
+          {today ? 'Today' : peek ? 'Day' : null}
           {peek && ` ${c.day}`}
         </span>
         <Blossom size={18} className="opacity-60 transition group-hover:rotate-45 group-hover:opacity-100" />

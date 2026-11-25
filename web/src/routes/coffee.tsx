@@ -178,7 +178,6 @@ export function CoffeePage() {
           <div className="relative mx-auto flex aspect-[4/5] w-56 flex-col items-center justify-center rounded-3xl bg-door text-door-ink shadow-xl">
             <span className="pointer-events-none absolute inset-3 rounded-2xl border border-door-ink/25" />
             <Blossom size={22} className="mb-2 opacity-70" />
-            <span className="text-xs font-semibold uppercase tracking-[0.3em] opacity-80">Day</span>
             <span className="display !text-door-ink text-[7rem]">{String(c.day).padStart(2, '0')}</span>
           </div>
           <div className="mt-6 flex justify-center">
