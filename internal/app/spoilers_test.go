@@ -116,8 +116,12 @@ func TestSpoilerMigrationKeepsOldToggle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Rebuild a v2 database by hand: undo v5, v4 and v3, then mark it v2.
+	// Rebuild a v2 database by hand: undo v6, v5, v4 and v3, then mark it v2.
 	for _, q := range []string{
+		`DROP TABLE recovery_codes`,
+		`DROP TABLE passkeys`,
+		`DROP INDEX users_webauthn_id`,
+		`ALTER TABLE users DROP COLUMN webauthn_id`,
 		`ALTER TABLE group_members DROP COLUMN display_name`,
 		`DROP TABLE brew_descriptors`,
 		`ALTER TABLE users DROP COLUMN spoiler_mode`,

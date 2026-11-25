@@ -44,6 +44,10 @@ leaderboard and brew feed.
 
 ![A group page](docs/screenshots/group.png)
 
+**Sign in with a passkey.** Use your phone's or laptop's fingerprint, face
+or PIN instead of a password. The site only ever stores a public key, so
+there's no password of yours to leak. Passwords still work if you prefer.
+
 It works well on a phone, updates live as people post, and has a dark mode.
 
 <img src="docs/screenshots/mobile-dark.png" alt="The calendar on a phone in dark mode" width="320">

@@ -29,6 +29,8 @@ services:
       TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:-0x4AAAAAAGRV0UPs2N-iBLmI}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
       TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:-}
+      # Passkey sign-in, bound to this hostname (from .env). Empty = off.
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-}
       # OpenTelemetry (standard OTEL_* variables). Off unless an endpoint is
       # set in .env, e.g. the host's collector at http://host.docker.internal:4318.
       OTEL_SERVICE_NAME: 24cups

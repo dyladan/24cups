@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -152,7 +153,7 @@ func (s *Server) register(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	id, _ := res.LastInsertId()
-	count(r.Context(), mSignups)
+	count(r.Context(), mSignups, authMethod("password"))
 	if err := s.startSession(w, r, id); err != nil {
 		return err
 	}
@@ -175,9 +176,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	var hash string
 	err := s.rdb.QueryRowContext(r.Context(),
 		`SELECT id, password_hash FROM users WHERE username = ?`, name).Scan(&id, &hash)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && hash == "") {
 		// Same work and delay as a wrong password, so timing doesn't reveal
-		// which usernames exist.
+		// which usernames exist or which accounts are passkey-only.
 		hash = string(dummyHash)
 		id = 0
 	} else if err != nil {
@@ -190,12 +191,12 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if !match || id == 0 {
-		count(r.Context(), mLogins, outcome("failure"))
+		count(r.Context(), mLogins, outcome("failure"), authMethod("password"))
 		s.guards.loginFails.spend(name)
 		s.guards.failDelay(r.Context())
 		return errf(401, "wrong username or password")
 	}
-	count(r.Context(), mLogins, outcome("success"))
+	count(r.Context(), mLogins, outcome("success"), authMethod("password"))
 	if err := s.startSession(w, r, id); err != nil {
 		return err
 	}
@@ -234,11 +235,16 @@ func (u *User) isRevealed(opened, rated, manual bool) bool {
 	return opened && (u.SpoilerMode != "rated" || rated || manual)
 }
 
-func (s *Server) writeUser(w http.ResponseWriter, r *http.Request, id int64, status int) error {
+func (s *Server) loadUser(ctx context.Context, id int64) (*User, error) {
 	u := &User{}
-	err := s.rdb.QueryRowContext(r.Context(),
+	err := s.rdb.QueryRowContext(ctx,
 		`SELECT id, username, display_name, spoiler_mode, temp_unit, created_at FROM users WHERE id = ?`, id,
 	).Scan(&u.ID, &u.Username, &u.DisplayName, &u.SpoilerMode, &u.TempUnit, &u.CreatedAt)
+	return u, err
+}
+
+func (s *Server) writeUser(w http.ResponseWriter, r *http.Request, id int64, status int) error {
+	u, err := s.loadUser(r.Context(), id)
 	if err != nil {
 		return err
 	}
@@ -311,11 +317,13 @@ func (s *Server) changePassword(w http.ResponseWriter, r *http.Request, u *User)
 	if err := s.rdb.QueryRowContext(r.Context(), `SELECT password_hash FROM users WHERE id = ?`, u.ID).Scan(&hash); err != nil {
 		return err
 	}
+	// Passkey-only accounts are adding a first password: there's no current
+	// one to check.
 	var match bool
 	var nh []byte
 	var err error
 	if err := s.guards.withPasswordCheck(r.Context(), func() {
-		if match = bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Current)) == nil; match {
+		if match = hash == "" || bcrypt.CompareHashAndPassword([]byte(hash), []byte(in.Current)) == nil; match {
 			nh, err = bcrypt.GenerateFromPassword([]byte(in.New), bcrypt.DefaultCost)
 		}
 	}); err != nil {

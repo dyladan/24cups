@@ -62,6 +62,8 @@ func main() {
 	calYear := flag.Int("calendar-year", envInt("CALENDAR_YEAR", 2026), "year of the December the calendar covers (unlocks doors for signed-out visitors)")
 	tsSiteKey := flag.String("turnstile-site-key", envOr("TURNSTILE_SITE_KEY", ""), "Cloudflare Turnstile site key (public)")
 	tsHosts := flag.String("turnstile-hostnames", envOr("TURNSTILE_HOSTNAMES", ""), "comma-separated hostnames Turnstile tokens must come from")
+	rpID := flag.String("passkey-rp-id", envOr("PASSKEY_RP_ID", ""), "hostname passkeys are bound to, e.g. advent.example.com (empty disables passkeys)")
+	rpOrigins := flag.String("passkey-origins", envOr("PASSKEY_ORIGINS", ""), "comma-separated origins allowed for passkeys (default https://<rp-id>)")
 	devDay := flag.Int("dev-day", envInt("DEV_DAY", 0), "development only: pretend it's this day of December (1–31) for which doors are open")
 	noLimits := flag.Bool("no-rate-limits", envOr("NO_RATE_LIMITS", "false") == "true", "disable rate limits (benchmarks only)")
 	flag.Parse()
@@ -130,6 +132,15 @@ func main() {
 	if *devDay > 0 {
 		slog.Warn("pretending it's December for development", "day", *devDay, "year", *calYear)
 	}
+	var origins []string
+	for _, o := range strings.Split(*rpOrigins, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			origins = append(origins, o)
+		}
+	}
+	if *rpID == "" {
+		slog.Warn("PASSKEY_RP_ID not set; passkeys are disabled")
+	}
 	if *ipHeader == "" {
 		slog.Warn("no -client-ip-header set; behind a proxy or tunnel every client shares one rate-limit bucket")
 	}
@@ -138,6 +149,7 @@ func main() {
 		// The secret is read only from the environment so it never appears
 		// in process arguments.
 		Turnstile: app.TurnstileConfig{SiteKey: *tsSiteKey, Secret: os.Getenv("TURNSTILE_SECRET_KEY"), Hostnames: app.ParseHostnames(*tsHosts)},
+		Passkeys:  app.PasskeyConfig{RPID: *rpID, Origins: origins},
 	})
 	if err != nil {
 		slog.Error("start", "err", err)

@@ -69,6 +69,24 @@ Each rejected sign-up logs `turnstile rejected sign-up` with a reason
 (`unreachable`, `not_success` plus Cloudflare's error codes,
 `hostname_mismatch`, `action_mismatch`, …).
 
+## Passkeys
+
+Set `PASSKEY_RP_ID` in `.env` to your public hostname (e.g.
+`advent.example.com`) to let people sign up and sign in with passkeys instead
+of passwords. The server stores only each passkey's public key, so a leaked
+database or backup can't be used to sign in.
+
+Passkeys are bound to that hostname. **Pick it once:** if it changes later,
+every registered passkey stops working, and people have to sign in with a
+password or a recovery code and add a new passkey. Visitors must use exactly
+`https://<PASSKEY_RP_ID>`; set `PASSKEY_ORIGINS` only if you serve the site
+from more than one origin.
+
+Passkey-only accounts get ten one-time recovery codes at sign-up (stored
+hashed). Anyone can also add a password as a fallback, or remove their
+password once they have a passkey. Leave `PASSKEY_RP_ID` empty to keep
+password-only sign-in.
+
 ## Backups
 
 Data lives in the `advent-data` volume (`/data/advent.db`). The `litestream`

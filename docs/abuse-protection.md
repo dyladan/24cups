@@ -10,6 +10,8 @@ can do. The defaults are in `DefaultLimits` in `internal/app/ratelimit.go`.
 | Sign-up | 5 per hour per IP |
 | Sign-in | 10/min per IP; 10 failures per 15 min per username, from any IP |
 | Failed sign-in | ~1 s delay; unknown usernames take the same time |
+| Passkeys | sign-up and sign-in share the limits above; each challenge expires in 5 minutes and works once |
+| Recovery codes | count as sign-in attempts, including the per-username failure limit |
 | Password hashing | at most 3 at once, then "busy" (bcrypt is the costliest thing an anonymous client can trigger) |
 | Live-update streams | 10 per user, 40 per IP |
 | Content per user | 30 brews per coffee, 50 presets, 20 grinders, 10 owned groups |

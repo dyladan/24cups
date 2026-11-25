@@ -2,8 +2,8 @@
 
 ## Stack
 
-A Go server (`net/http`, SQLite via the pure-Go `modernc.org/sqlite`, bcrypt
-and cookie sessions) serving a React + TypeScript single-page app (Vite,
+A Go server (`net/http`, SQLite via the pure-Go `modernc.org/sqlite`, bcrypt,
+passkeys via `go-webauthn`, and cookie sessions) serving a React + TypeScript single-page app (Vite,
 TanStack Router, TanStack Query, Tailwind v4). The built frontend is embedded
 in a single static binary.
 
@@ -27,6 +27,11 @@ cd web && npm run dev    # Vite on http://localhost:5173, proxies /api to :8080
 
 `DAY=3 make dev` pretends it's December 3, for both the server and the
 frontend, so you can try the calendar outside December.
+
+`make dev` turns passkeys on for `localhost`, which browsers treat as secure,
+so you can try them without HTTPS. Use `http://localhost:5173` rather than
+`127.0.0.1`: passkeys are bound to the hostname. In Chrome, DevTools → More
+tools → WebAuthn adds a virtual authenticator if your machine has none.
 
 To build and run the single binary:
 

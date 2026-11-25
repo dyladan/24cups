@@ -171,7 +171,10 @@ func (s *Server) CheckTurnstile(ctx context.Context) error {
 // publicConfig tells the browser what it needs to render (the site key is
 // public by design).
 func (s *Server) publicConfig(w http.ResponseWriter, r *http.Request) error {
-	cfg := map[string]string{}
+	cfg := map[string]any{}
+	if s.wa != nil {
+		cfg["passkeys"] = true
+	}
 	if s.turnstile.enabled() {
 		cfg["turnstileSiteKey"] = s.turnstile.SiteKey
 	}
