@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState, type PointerEvent, type ReactNode } from 'react'
 import clsx from 'clsx'
 import { Star, X } from 'lucide-react'
 import { cToF, fToC, formatTime, parseTime, round } from '../lib/format'
@@ -113,37 +113,78 @@ export function Stars({ value, size = 16, className }: { value: number | null | 
   )
 }
 
-/** Quarter-star rating input; value is 1–20 (quarter-stars) or null. */
+/**
+ * Quarter-star rating input; value is 1–20 (quarter-stars) or null. Works as
+ * a slider: press and drag across the stars (finger or mouse) to preview, and
+ * the rating under the pointer is set on release. Arrow keys adjust it too.
+ */
 export function StarInput({ value, onChange }: { value: number | null; onChange: (v: number | null) => void }) {
-  const [hover, setHover] = useState<number | null>(null)
-  const shown = hover ?? value ?? 0
+  const [preview, setPreview] = useState<number | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const shown = preview ?? value ?? 0
+
+  const at = (e: PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return Math.max(1, Math.min(20, Math.ceil(((e.clientX - r.left) / r.width) * 20)))
+  }
+  const step = (v: number) => onChange(Math.max(1, Math.min(20, v)))
+
   return (
     <div className="flex items-center gap-3">
-      <div className="flex" onMouseLeave={() => setHover(null)} role="radiogroup" aria-label="Rating">
+      <div
+        role="slider"
+        tabIndex={0}
+        aria-label="Rating"
+        aria-valuemin={0.25}
+        aria-valuemax={5}
+        aria-valuenow={value != null ? value / 4 : undefined}
+        aria-valuetext={value != null ? `${value / 4} stars` : 'Not rated'}
+        // pan-y keeps vertical page scrolling; horizontal drags rate.
+        className="flex cursor-pointer touch-pan-y select-none rounded outline-none focus-visible:ring-2 focus-visible:ring-gold"
+        onPointerDown={(e) => {
+          if (e.button !== 0) return
+          e.currentTarget.setPointerCapture(e.pointerId)
+          setDragging(true)
+          setPreview(at(e))
+        }}
+        onPointerMove={(e) => {
+          // Mouse hover previews too; touch only moves while pressed.
+          if (dragging || e.pointerType === 'mouse') setPreview(at(e))
+        }}
+        onPointerUp={(e) => {
+          if (!dragging) return
+          setDragging(false)
+          // Commit what the user was looking at when they let go.
+          onChange(preview ?? at(e))
+          if (e.pointerType !== 'mouse') setPreview(null)
+        }}
+        onPointerCancel={() => {
+          setDragging(false)
+          setPreview(null)
+        }}
+        onPointerLeave={() => {
+          if (!dragging) setPreview(null)
+        }}
+        onKeyDown={(e) => {
+          const v = value ?? 0
+          if (e.key === 'ArrowRight' || e.key === 'ArrowUp') step(v + 1)
+          else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') step(v - 1)
+          else if (e.key === 'PageUp') step(v + 4)
+          else if (e.key === 'PageDown') step(v - 4)
+          else if (e.key === 'Home') step(1)
+          else if (e.key === 'End') step(20)
+          else return
+          e.preventDefault()
+        }}
+      >
         {[1, 2, 3, 4, 5].map((i) => {
           const fill = Math.max(0, Math.min(4, shown - (i - 1) * 4)) / 4
           return (
-            <span key={i} className="relative size-10 text-gold sm:size-9">
+            <span key={i} className="pointer-events-none relative size-10 text-gold sm:size-9">
               <Star className="absolute inset-0 size-full text-line" fill="currentColor" strokeWidth={0} />
               <span className="absolute inset-0 overflow-hidden" style={{ width: `${fill * 100}%` }}>
                 <Star className="size-10 sm:size-9" fill="currentColor" strokeWidth={0} />
               </span>
-              {[1, 2, 3, 4].map((q) => {
-                const v = (i - 1) * 4 + q
-                return (
-                  <button
-                    key={v}
-                    type="button"
-                    role="radio"
-                    aria-checked={value === v}
-                    aria-label={`${v / 4} stars`}
-                    className="absolute inset-y-0 w-1/4"
-                    style={{ left: `${(q - 1) * 25}%` }}
-                    onMouseEnter={() => setHover(v)}
-                    onClick={() => onChange(v)}
-                  />
-                )
-              })}
             </span>
           )
         })}
