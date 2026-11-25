@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
@@ -24,7 +25,9 @@ type Group struct {
 type GroupMember struct {
 	UserID      int64  `json:"userId"`
 	Username    string `json:"username"`
-	DisplayName string `json:"displayName"`
+	DisplayName string `json:"displayName"` // group name if set, else profile name
+	GroupName   string `json:"groupName"`   // the member's name in this group; "" if unset
+	ProfileName string `json:"profileName"` // the member's profile display name
 	Role        string `json:"role"`
 	JoinedAt    string `json:"joinedAt"`
 	Opens       int    `json:"opens"`
@@ -47,11 +50,13 @@ type GroupDetail struct {
 }
 
 const groupSelect = `
-	SELECT g.id, g.name, g.description, g.is_public, g.owner_id, ou.display_name,
+	SELECT g.id, g.name, g.description, g.is_public, g.owner_id,
+	       COALESCE(NULLIF(om.display_name, ''), ou.display_name),
 	       (SELECT COUNT(*) FROM group_members WHERE group_id = g.id),
 	       COALESCE(m.role, ''), g.invite_code, g.created_at
 	FROM groups g
 	JOIN users ou ON ou.id = g.owner_id
+	LEFT JOIN group_members om ON om.group_id = g.id AND om.user_id = g.owner_id
 	LEFT JOIN group_members m ON m.group_id = g.id AND m.user_id = ?`
 
 func scanGroups(rows *sql.Rows) ([]Group, error) {
@@ -191,21 +196,24 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, u *User) error
 	d := &GroupDetail{Group: *g, Members: []GroupMember{}, Coffees: []GroupCoffee{}}
 
 	rows, err := s.rdb.QueryContext(r.Context(), `
-		SELECT u.id, u.username, u.display_name, m.role, m.joined_at,
+		SELECT u.id, u.username, u.display_name, m.display_name, m.role, m.joined_at,
 		       (SELECT COUNT(*) FROM coffee_opens o WHERE o.user_id = u.id),
 		       (SELECT COUNT(*) FROM brews b WHERE b.user_id = u.id AND b.is_public = 1)
 		FROM group_members m JOIN users u ON u.id = m.user_id
 		WHERE m.group_id = ?
-		ORDER BY m.role = 'owner' DESC, u.display_name COLLATE NOCASE`, id)
+		ORDER BY m.role = 'owner' DESC, COALESCE(NULLIF(m.display_name, ''), u.display_name) COLLATE NOCASE`, id)
 	if err != nil {
 		return err
 	}
+	names := map[int64]string{}
 	for rows.Next() {
 		var m GroupMember
-		if err := rows.Scan(&m.UserID, &m.Username, &m.DisplayName, &m.Role, &m.JoinedAt, &m.Opens, &m.Brews); err != nil {
+		if err := rows.Scan(&m.UserID, &m.Username, &m.ProfileName, &m.GroupName, &m.Role, &m.JoinedAt, &m.Opens, &m.Brews); err != nil {
 			rows.Close()
 			return err
 		}
+		m.DisplayName = cmp.Or(m.GroupName, m.ProfileName)
+		names[m.UserID] = m.DisplayName
 		d.Members = append(d.Members, m)
 	}
 	rows.Close()
@@ -256,6 +264,11 @@ func (s *Server) getGroup(w http.ResponseWriter, r *http.Request, u *User) error
 		AND b.user_id IN (SELECT user_id FROM group_members WHERE group_id = ?)`, 30, id)
 	if err != nil {
 		return err
+	}
+	for _, b := range d.Brews {
+		if n, ok := names[b.UserID]; ok {
+			b.DisplayName = n
+		}
 	}
 	writeJSON(w, 200, d)
 	return nil
@@ -432,4 +445,53 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request, u *User) e
 	}
 	s.notify(r, keyGroups, keyCoffees)
 	return noContent(w)
+}
+
+// setGroupName sets the caller's display name within one group. An empty
+// name clears it, falling back to the profile display name. A name can't
+// match another member's group or profile name, so nobody can pose as
+// someone else there.
+func (s *Server) setGroupName(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	g, err := s.loadGroup(r.Context(), u, id)
+	if err != nil {
+		return err
+	}
+	if g.Role == "" {
+		return errf(403, "join the group to set a name in it")
+	}
+	var in struct {
+		DisplayName string `json:"displayName"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		return err
+	}
+	name, err := trimMax("display name", in.DisplayName, 50)
+	if err != nil {
+		return err
+	}
+	if name != "" {
+		var taken bool
+		if err := s.rdb.QueryRowContext(r.Context(), `
+			SELECT EXISTS(SELECT 1 FROM group_members m JOIN users u ON u.id = m.user_id
+			WHERE m.group_id = ? AND m.user_id != ?
+			  AND (COALESCE(NULLIF(m.display_name, ''), u.display_name) = ?3 COLLATE NOCASE
+			       OR u.display_name = ?3 COLLATE NOCASE))`,
+			id, u.ID, name).Scan(&taken); err != nil {
+			return err
+		}
+		if taken {
+			return errf(409, "another member of this group already goes by that name")
+		}
+	}
+	if _, err := s.db.ExecContext(r.Context(), `UPDATE group_members SET display_name = ? WHERE group_id = ? AND user_id = ?`,
+		name, id, u.ID); err != nil {
+		return err
+	}
+	s.notify(r, keyGroups)
+	writeJSON(w, 200, map[string]string{"displayName": name})
+	return nil
 }

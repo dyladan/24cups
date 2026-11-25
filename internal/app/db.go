@@ -210,6 +210,10 @@ CREATE TABLE brew_descriptors (
 	PRIMARY KEY (brew_id, descriptor)
 );
 `,
+	// v5: per-group display names ('' = use the profile display name)
+	`
+ALTER TABLE group_members ADD COLUMN display_name TEXT NOT NULL DEFAULT '';
+`,
 }
 
 func migrate(db *sql.DB) error {

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ArrowLeft, Check, Copy, EyeOff, Globe, Lock, RefreshCw, UserMinus, Users } from 'lucide-react'
+import { ArrowLeft, Check, Copy, EyeOff, Globe, Lock, Pencil, RefreshCw, UserMinus, Users } from 'lucide-react'
 import { api, discoverGroupsQuery, groupQuery, meQuery, myGroupsQuery, useApiMutation, type Group, type GroupDetail } from '../api'
 import { BrewCard } from '../components/BrewCard'
 import { Empty, ErrorText, Field, PageHeader, Spinner, Stars, Toggle } from '../components/ui'
@@ -161,6 +161,32 @@ function InviteBox({ g }: { g: Group }) {
   )
 }
 
+function GroupNameForm({ g, current, profileName, onDone }: { g: GroupDetail; current: string; profileName: string; onDone: () => void }) {
+  const [name, setName] = useState(current)
+  const save = useApiMutation((displayName: string) => api(`/groups/${g.id}/name`, { method: 'PUT', json: { displayName } }), [['groups']])
+  return (
+    <form
+      className="mt-1.5 space-y-2"
+      onSubmit={(e: FormEvent) => {
+        e.preventDefault()
+        save.mutate(name, { onSuccess: onDone })
+      }}
+    >
+      <input className="input !py-1.5 text-sm" value={name} onChange={(e) => setName(e.target.value)} maxLength={50} placeholder={profileName} autoFocus aria-label="Your name in this group" />
+      <p className="text-xs text-ink-3">Only shown in {g.name}. Leave blank to use your profile name.</p>
+      <ErrorText error={save.error} />
+      <div className="flex gap-2">
+        <button className="btn btn-primary !px-3 !py-1 text-sm" disabled={save.isPending || name.trim() === current}>
+          Save
+        </button>
+        <button type="button" className="btn btn-ghost !px-3 !py-1 text-sm" onClick={onDone}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
 export function GroupPage() {
   const { groupId } = groupRoute.useParams()
   const navigate = useNavigate()
@@ -171,6 +197,7 @@ export function GroupPage() {
   const del = useApiMutation(() => api(`/groups/${groupId}`, { method: 'DELETE' }), [['groups']])
   const kick = useApiMutation((uid: number) => api(`/groups/${groupId}/members/${uid}`, { method: 'DELETE' }), [['groups']])
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [editingName, setEditingName] = useState(false)
   const [sort, setSort] = useState<'rating' | 'day'>('rating')
 
   if (isPending) return <Spinner />
@@ -287,19 +314,28 @@ export function GroupPage() {
             </p>
             <ul className="space-y-2.5">
               {g.members.map((m) => (
-                <li key={m.userId} className="flex items-center gap-3">
+                <li key={m.userId} className={clsx('flex gap-3', m.userId === me?.id && editingName ? 'items-start' : 'items-center')}>
                   <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-paper-2 text-xs font-bold uppercase">
                     {m.displayName.slice(0, 2)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {m.displayName}
-                      {m.userId === me?.id && <span className="text-ink-3"> (you)</span>}
+                    <p className="flex items-center gap-1.5 text-sm font-medium">
+                      <span className="truncate">{m.displayName}</span>
+                      {m.userId === me?.id && <span className="shrink-0 text-ink-3">(you)</span>}
+                      {m.userId === me?.id && !editingName && (
+                        <button className="shrink-0 text-ink-3 hover:text-ink" onClick={() => setEditingName(true)} aria-label="Change your name in this group" title="Change your name in this group">
+                          <Pencil size={12} />
+                        </button>
+                      )}
                     </p>
+                    {m.groupName && <p className="truncate text-xs text-ink-3">aka {m.profileName}</p>}
                     <p className="text-xs text-ink-3">
                       {m.role === 'owner' ? 'Owner · ' : ''}
                       {m.opens} opened · {plural(m.brews, 'shared brew')}
                     </p>
+                    {m.userId === me?.id && editingName && (
+                      <GroupNameForm g={g} current={m.groupName} profileName={m.profileName} onDone={() => setEditingName(false)} />
+                    )}
                   </div>
                   {isOwner && m.userId !== me?.id && (
                     <button className="text-ink-3 hover:text-red-600" onClick={() => kick.mutate(m.userId)} aria-label={`Remove ${m.displayName}`} title="Remove from group">

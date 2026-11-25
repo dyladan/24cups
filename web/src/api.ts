@@ -157,7 +157,11 @@ export interface GroupDetail extends Group {
   members: {
     userId: number
     username: string
+    /** Name shown in this group: groupName if set, else profileName. */
     displayName: string
+    /** The member's own name for this group; '' if unset. */
+    groupName: string
+    profileName: string
     role: string
     joinedAt: string
     opens: number

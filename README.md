@@ -36,6 +36,8 @@ Lab or Fellow**.
 - **Ratio entry**: `1:X`, `g in / mL out`, or `g/L`, all stored as one ratio.
 - **Groups**: public (discoverable) or private (invite link or code). Each group
   has its own leaderboard and brew feed. A user can belong to many groups.
+  Members can set a display name for each group, shown only on that group's
+  page; it can't match another member's group or profile name.
 - **Rankings**: opened coffees ranked by community average, your own average, or favorites.
 
 Global averages are computed **per user first** (each user's included brews are

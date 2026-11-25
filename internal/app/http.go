@@ -213,6 +213,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/groups/{id}/join", s.authed(s.joinPublicGroup))
 	m.HandleFunc("POST /api/groups/{id}/leave", s.authed(s.leaveGroup))
 	m.HandleFunc("POST /api/groups/{id}/invite-code", s.authed(s.regenerateInvite))
+	m.HandleFunc("PUT /api/groups/{id}/name", s.authed(s.setGroupName))
 	m.HandleFunc("DELETE /api/groups/{id}/members/{userId}", s.authed(s.removeMember))
 
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
