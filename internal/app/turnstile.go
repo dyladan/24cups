@@ -112,14 +112,14 @@ func (s *Server) verifyTurnstile(r *http.Request, token, action string) error {
 	span := trace.SpanFromContext(r.Context())
 	if reason == "" {
 		count(r.Context(), mTurnstile, outcome("success"))
-		span.SetAttributes(attribute.String("advent.turnstile.outcome", "success"))
+		span.SetAttributes(attribute.String("onyx_advent.turnstile.outcome", "success"))
 		return nil
 	}
-	count(r.Context(), mTurnstile, outcome("rejected"), attribute.String("advent.turnstile.reason", reason))
+	count(r.Context(), mTurnstile, outcome("rejected"), attribute.String("onyx_advent.turnstile.reason", reason))
 	span.SetAttributes(
-		attribute.String("advent.turnstile.outcome", "rejected"),
-		attribute.String("advent.turnstile.reason", reason),
-		attribute.StringSlice("advent.turnstile.error_codes", res.ErrorCodes),
+		attribute.String("onyx_advent.turnstile.outcome", "rejected"),
+		attribute.String("onyx_advent.turnstile.reason", reason),
+		attribute.StringSlice("onyx_advent.turnstile.error_codes", res.ErrorCodes),
 	)
 	attrs := []any{"reason", reason, "error_codes", res.ErrorCodes,
 		"hostname", res.Hostname, "allowed_hostnames", t.Hostnames, "action", res.Action, "want_action", action}

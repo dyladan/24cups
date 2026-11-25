@@ -122,9 +122,9 @@ endpoint is set (`OTEL_SDK_DISABLED=true` also turns them off).
 - **Metrics:** `http.server.request.duration` and body sizes,
   `db.client.operation.duration` and `db.sql.connection.*` (per pool:
   `read`/`write`), Go runtime (`go.*`), and app metrics:
-  `advent.signups`, `advent.logins` (`advent.outcome`),
-  `advent.brews.created`, `advent.rate_limit.rejections` (`advent.limiter`),
-  `advent.turnstile.verifications`, `advent.live_updates.streams`.
+  `onyx_advent.signups`, `onyx_advent.logins` (`onyx_advent.outcome`),
+  `onyx_advent.brews.created`, `onyx_advent.rate_limit.rejections` (`onyx_advent.limiter`),
+  `onyx_advent.turnstile.verifications`, `onyx_advent.live_updates.streams`.
 - **Logs:** the server's slog output also goes out as OTLP logs, correlated
   with the active span; it still prints to stderr.
 - **Resource:** `service.name=onyx-advent`, `service.version` (build arg
@@ -173,7 +173,7 @@ OTel collector.
    failed: …`. Each rejected sign-up logs `turnstile rejected sign-up` with a
    reason (`unreachable`, `not_success` plus Cloudflare's error codes,
    `hostname_mismatch`, `action_mismatch`, …), also recorded on the span and
-   in `advent.turnstile.verifications`.
+   in `onyx_advent.turnstile.verifications`.
 5. **Recommended Cloudflare settings** (SSL/TLS → Edge Certificates): Always
    Use HTTPS on, minimum TLS 1.2, and HSTS once you've confirmed HTTPS works.
 
