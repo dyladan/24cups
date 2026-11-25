@@ -30,6 +30,9 @@ type coffeeAgg struct {
 	pairs map[int64]*pairStat // users with at least one included rating
 	opens map[int64]struct{}
 	favs  map[int64]struct{}
+	// flavors holds each user's descriptor set (users with at least one
+	// descriptor on an included brew).
+	flavors map[int64]map[string]struct{}
 
 	// derived from pairs
 	avgSum    float64 // sum of per-user averages (1–10 scale)
@@ -38,7 +41,7 @@ type coffeeAgg struct {
 }
 
 func newCoffeeAgg() *coffeeAgg {
-	return &coffeeAgg{pairs: map[int64]*pairStat{}, opens: map[int64]struct{}{}, favs: map[int64]struct{}{}}
+	return &coffeeAgg{pairs: map[int64]*pairStat{}, opens: map[int64]struct{}{}, favs: map[int64]struct{}{}, flavors: map[int64]map[string]struct{}{}}
 }
 
 func (a *coffeeAgg) recompute() {
@@ -106,6 +109,29 @@ func loadStats(ctx context.Context, db *sql.DB) (*statsStore, error) {
 		}
 		rows.Close()
 	}
+	rows, err = db.QueryContext(ctx, `
+		SELECT DISTINCT b.coffee_id, b.user_id, d.descriptor
+		FROM brew_descriptors d JOIN brews b ON b.id = d.brew_id
+		WHERE `+includedFlavors)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var cid, uid int64
+		var d string
+		if err := rows.Scan(&cid, &uid, &d); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		a := s.agg(cid)
+		set := a.flavors[uid]
+		if set == nil {
+			set = map[string]struct{}{}
+			a.flavors[uid] = set
+		}
+		set[d] = struct{}{}
+	}
+	rows.Close()
 	for _, a := range s.coffees {
 		a.recompute()
 	}
@@ -133,6 +159,22 @@ func (s *statsStore) refresh(ctx context.Context, db *sql.DB, userID, coffeeID i
 		p.hist[rating-1] += n
 	}
 	rows.Close()
+	flavors := map[string]struct{}{}
+	rows, err = db.QueryContext(ctx, `
+		SELECT DISTINCT d.descriptor FROM brew_descriptors d JOIN brews b ON b.id = d.brew_id
+		WHERE b.user_id = ? AND b.coffee_id = ? AND `+includedFlavors, userID, coffeeID)
+	if err != nil {
+		return err
+	}
+	for rows.Next() {
+		var d string
+		if err := rows.Scan(&d); err != nil {
+			rows.Close()
+			return err
+		}
+		flavors[d] = struct{}{}
+	}
+	rows.Close()
 	var opened, fav bool
 	if err := db.QueryRowContext(ctx, `SELECT
 			EXISTS(SELECT 1 FROM coffee_opens WHERE user_id = ? AND coffee_id = ?),
@@ -148,6 +190,11 @@ func (s *statsStore) refresh(ctx context.Context, db *sql.DB, userID, coffeeID i
 		a.pairs[userID] = p
 	} else {
 		delete(a.pairs, userID)
+	}
+	if len(flavors) > 0 {
+		a.flavors[userID] = flavors
+	} else {
+		delete(a.flavors, userID)
 	}
 	setMember(a.opens, userID, opened)
 	setMember(a.favs, userID, fav)

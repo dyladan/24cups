@@ -4,6 +4,7 @@ import { EyeOff, Lock, Pencil } from 'lucide-react'
 import { meQuery, type Brew } from '../api'
 import { formatDate, formatRatio, formatTemp, formatTime } from '../lib/format'
 import { Stars } from './ui'
+import { FlavorChips } from './Flavors'
 
 export function BrewCard({ brew, showCoffee = false, showUser = true }: { brew: Brew; showCoffee?: boolean; showUser?: boolean }) {
   const { data: me } = useQuery(meQuery)
@@ -77,6 +78,7 @@ export function BrewCard({ brew, showCoffee = false, showUser = true }: { brew: 
         </div>
       </dl>
       {brew.burrset && <p className="mt-2 text-xs text-ink-3">Burrs: {brew.burrset}</p>}
+      <FlavorChips flavors={brew.descriptors ?? []} className="mt-3" />
       {brew.notes && <p className="mt-3 border-t border-line pt-3 text-sm whitespace-pre-wrap text-ink-2">{brew.notes}</p>}
     </article>
   )

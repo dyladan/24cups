@@ -9,6 +9,7 @@ import { formatRating, plural } from '../lib/format'
 import { StatRow, todayDay } from './calendar'
 import { useAnonSpoilers, useCoffeeView } from '../lib/anon'
 import { PeekButton, usePeek } from '../components/Peek'
+import { FlavorPanel } from '../components/Flavors'
 
 const route = getRouteApi('/public/coffee/$coffeeId')
 
@@ -45,6 +46,11 @@ function BlindPanel({ c, onReveal, pending }: { c: CoffeeDetail; onReveal: () =>
       {c.stats && (
         <p className="mt-3 inline-flex items-center gap-1.5 text-xs text-ink-3 tabular-nums">
           <Eye size={13} /> {plural(c.stats.opens, 'person has', 'people have')} opened this door
+        </p>
+      )}
+      {!!c.flavors?.tasters && (
+        <p className="mt-1 text-xs text-ink-3 tabular-nums">
+          {plural(c.flavors.tasters, 'person has', 'people have')} described its flavors
         </p>
       )}
       <div className="mt-4 flex flex-wrap gap-2">
@@ -324,7 +330,10 @@ export function CoffeePage() {
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           {c.revealed ? (
-            <StatsPanel c={c} />
+            <>
+              <StatsPanel c={c} />
+              {c.flavors && <FlavorPanel flavors={c.flavors} />}
+            </>
           ) : (
             <BlindPanel c={c} onReveal={() => reveal.mutate()} pending={reveal.isPending} />
           )}

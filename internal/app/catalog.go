@@ -92,6 +92,7 @@ func (s *Server) catalog(w http.ResponseWriter, r *http.Request) error {
 		"methods":  catalogMethods,
 		"grinders": catalogGrinders,
 		"burrsets": catalogBurrsets,
+		"flavors":  catalogFlavors,
 	})
 	return nil
 }

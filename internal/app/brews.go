@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -29,11 +30,12 @@ type Brew struct {
 	Burrset      string `json:"burrset"`
 	GrindSetting string `json:"grindSetting"`
 
-	Rating            *int   `json:"rating"` // 1–10 half-stars
-	Notes             string `json:"notes"`
-	IsPublic          bool   `json:"isPublic"`
-	ExcludeFromGlobal bool   `json:"excludeFromGlobal"`
-	BrewedAt          string `json:"brewedAt"`
+	Rating            *int     `json:"rating"` // 1–10 half-stars
+	Notes             string   `json:"notes"`
+	Descriptors       []string `json:"descriptors"` // normalized lowercase flavor tags
+	IsPublic          bool     `json:"isPublic"`
+	ExcludeFromGlobal bool     `json:"excludeFromGlobal"`
+	BrewedAt          string   `json:"brewedAt"`
 }
 
 // queryBrews returns brews matching where (which must already restrict
@@ -72,9 +74,58 @@ func (s *Server) queryBrews(ctx context.Context, viewer *User, where string, lim
 			b.RecipeID, b.GrinderID = nil, nil
 			b.ExcludeFromGlobal = false
 		}
+		b.Descriptors = []string{}
 		list = append(list, b)
 	}
-	return list, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return list, s.attachDescriptors(ctx, list)
+}
+
+// attachDescriptors fills in flavor tags for already-visible brews.
+func (s *Server) attachDescriptors(ctx context.Context, list []*Brew) error {
+	if len(list) == 0 {
+		return nil
+	}
+	byID := make(map[int64]*Brew, len(list))
+	ids := make([]int64, len(list))
+	for i, b := range list {
+		byID[b.ID] = b
+		ids[i] = b.ID
+	}
+	idsJSON, _ := json.Marshal(ids)
+	rows, err := s.rdb.QueryContext(ctx, `SELECT brew_id, descriptor FROM brew_descriptors
+		WHERE brew_id IN (SELECT value FROM json_each(?)) ORDER BY rowid`, string(idsJSON))
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id int64
+		var d string
+		if err := rows.Scan(&id, &d); err != nil {
+			return err
+		}
+		if b := byID[id]; b != nil {
+			b.Descriptors = append(b.Descriptors, d)
+		}
+	}
+	return rows.Err()
+}
+
+// setDescriptors replaces a brew's flavor tags inside tx.
+func setDescriptors(tx *sql.Tx, brewID int64, descriptors []string) error {
+	if _, err := tx.Exec(`DELETE FROM brew_descriptors WHERE brew_id = ?`, brewID); err != nil {
+		return err
+	}
+	for _, d := range descriptors {
+		if _, err := tx.Exec(`INSERT OR IGNORE INTO brew_descriptors(brew_id, descriptor) VALUES (?, ?)`, brewID, d); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Server) listMyBrews(w http.ResponseWriter, r *http.Request, u *User) error {
@@ -106,15 +157,16 @@ type brewInput struct {
 	CoffeeID int64  `json:"coffeeId"`
 	RecipeID *int64 `json:"recipeId"`
 	RecipeFields
-	ActualTimeS       *int64  `json:"actualTimeS"`
-	GrinderID         *int64  `json:"grinderId"`
-	Burrset           string  `json:"burrset"`
-	GrindSetting      string  `json:"grindSetting"`
-	Rating            *int    `json:"rating"`
-	Notes             string  `json:"notes"`
-	IsPublic          bool    `json:"isPublic"`
-	ExcludeFromGlobal bool    `json:"excludeFromGlobal"`
-	BrewedAt          *string `json:"brewedAt"`
+	ActualTimeS       *int64   `json:"actualTimeS"`
+	GrinderID         *int64   `json:"grinderId"`
+	Burrset           string   `json:"burrset"`
+	GrindSetting      string   `json:"grindSetting"`
+	Rating            *int     `json:"rating"`
+	Notes             string   `json:"notes"`
+	Descriptors       []string `json:"descriptors"`
+	IsPublic          bool     `json:"isPublic"`
+	ExcludeFromGlobal bool     `json:"excludeFromGlobal"`
+	BrewedAt          *string  `json:"brewedAt"`
 }
 
 func (s *Server) readBrew(w http.ResponseWriter, r *http.Request, u *User) (*brewInput, string, error) {
@@ -145,6 +197,9 @@ func (s *Server) readBrew(w http.ResponseWriter, r *http.Request, u *User) (*bre
 		return nil, "", err
 	}
 	if in.Notes, err = trimMax("notes", in.Notes, 4000); err != nil {
+		return nil, "", err
+	}
+	if in.Descriptors, err = cleanDescriptors(in.Descriptors); err != nil {
 		return nil, "", err
 	}
 	if in.IsPublic {
@@ -207,10 +262,13 @@ func (s *Server) createBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	if err != nil {
 		return err
 	}
+	id, _ := res.LastInsertId()
+	if err := setDescriptors(tx, id, in.Descriptors); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	id, _ := res.LastInsertId()
 	count(r.Context(), mBrews)
 	s.brewChanged(r, u, in.CoffeeID)
 	list, err := s.queryBrews(r.Context(), u, `b.id = ?`, 1, id)
@@ -257,6 +315,9 @@ func (s *Server) updateBrew(w http.ResponseWriter, r *http.Request, u *User) err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return errNotFound
+	}
+	if err := setDescriptors(tx, id, in.Descriptors); err != nil {
+		return err
 	}
 	if _, err := tx.Exec(`INSERT OR IGNORE INTO coffee_opens(user_id, coffee_id, opened_at) VALUES (?, ?, ?)`, u.ID, in.CoffeeID, now()); err != nil {
 		return err

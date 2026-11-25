@@ -51,6 +51,9 @@ type CoffeeDetail struct {
 	Coffee
 	Distribution []int        `json:"distribution,omitempty"` // index 0 = ½★ … 9 = 5★
 	GroupStats   []GroupStats `json:"groupStats,omitempty"`
+	// Flavors is nil on sealed doors; while tasting blind it has only the
+	// taster count.
+	Flavors *Flavors `json:"flavors,omitempty"`
 }
 
 type GroupStats struct {
@@ -225,6 +228,12 @@ func (s *Server) getCoffee(w http.ResponseWriter, r *http.Request, u *User) erro
 		return errNotFound
 	}
 	d := &CoffeeDetail{Coffee: *list[0]}
+	if d.Opened || d.Stats != nil {
+		full := d.Revealed || !d.Opened
+		if d.Flavors, err = s.coffeeFlavors(r.Context(), u, id, full); err != nil {
+			return err
+		}
+	}
 	if d.Revealed || (!d.Opened && d.Stats != nil) {
 		d.Distribution = s.stats.distribution(id)
 

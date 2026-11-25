@@ -17,6 +17,7 @@ import {
 } from '../api'
 import { ErrorText, Field, PageHeader, RatioInput, Spinner, StarInput, SuggestInput, TempInput, TimeInput, Toggle } from '../components/ui'
 import { formatRatio, formatTemp, formatTime } from '../lib/format'
+import { FlavorPicker } from '../components/Flavors'
 
 const newRoute = getRouteApi('/app/brews/new')
 const editRoute = getRouteApi('/app/brews/$brewId/edit')
@@ -37,6 +38,7 @@ const emptyDraft = (coffeeId: number | undefined): Draft => ({
   grindSetting: '',
   rating: null,
   notes: '',
+  descriptors: [],
   isPublic: true,
   excludeFromGlobal: false,
 })
@@ -56,6 +58,7 @@ function fromBrew(b: Brew): Draft {
     grindSetting: b.grindSetting,
     rating: b.rating,
     notes: b.notes,
+    descriptors: b.descriptors ?? [],
     isPublic: b.isPublic,
     excludeFromGlobal: b.excludeFromGlobal,
     brewedAt: b.brewedAt,
@@ -208,6 +211,14 @@ function BrewForm({ initial, brewId }: { initial: Draft; brewId?: number }) {
               )}
             </Field>
           </div>
+        </section>
+
+        <section className="card space-y-4 p-5">
+          <div>
+            <h2 className="display text-xl">Flavor</h2>
+            <p className="mt-1 text-sm text-ink-2">What did you taste?</p>
+          </div>
+          <FlavorPicker value={d.descriptors} onChange={(descriptors) => set({ descriptors })} groups={catalog?.flavors ?? []} />
           <Field label="Notes">
             <textarea className="input min-h-24" value={d.notes} onChange={(e) => set({ notes: e.target.value })} placeholder="Tasting notes, pour schedule, what you'd change…" maxLength={4000} />
           </Field>

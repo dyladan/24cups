@@ -20,6 +20,14 @@ Lab or Fellow**.
 - **Brews**: coffee + recipe (equipment, ratio, temp, target time) + actual time,
   grinder, burrs, grind setting, half-star rating, notes. Brews are public or private.
   Private brews can be excluded from the global ratings.
+- **Flavors**: tag what you tasted on each brew (up to 10), picked from the
+  SCA/WCR flavor wheel's groups and terms (plus common roaster notes, mouthfeel
+  words and an "Off-flavors" group) or typed freely. The coffee page ranks the most
+  common flavors by share of tasters: each person's tags across their brews
+  count once. The list appears once 3 people have tagged a coffee, typed-in
+  flavors appear once 2 people use them, and it's a spoiler like the scores
+  (hidden while tasting blind). Counting follows the same public/excluded rules
+  as ratings.
 - **Presets and grinders**: save recipe presets and grinders on your profile. Each
   grinder can have several burrsets. Common models and burrs are suggested, and
   you can type a custom value for anything.

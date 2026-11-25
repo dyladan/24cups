@@ -202,6 +202,14 @@ UPDATE users SET spoiler_mode = 'always' WHERE reveal_unopened = 1;
 ALTER TABLE users DROP COLUMN reveal_unopened;
 ALTER TABLE coffee_opens ADD COLUMN revealed INTEGER NOT NULL DEFAULT 0;
 `,
+	// v4: flavor descriptors tagged on brews (normalized lowercase)
+	`
+CREATE TABLE brew_descriptors (
+	brew_id    INTEGER NOT NULL REFERENCES brews(id) ON DELETE CASCADE,
+	descriptor TEXT NOT NULL,
+	PRIMARY KEY (brew_id, descriptor)
+);
+`,
 }
 
 func migrate(db *sql.DB) error {

@@ -55,10 +55,28 @@ export interface GroupStats extends Stats {
   groupName: string
 }
 
+export interface FlavorCount {
+  name: string
+  /** Tasters who used it. */
+  count: number
+  /** The viewer tagged it on one of their own brews. */
+  mine: boolean
+}
+
+export interface Flavors {
+  /** People who tagged at least one flavor. */
+  tasters: number
+  /** Null until enough people have tagged it, or while tasting blind. */
+  top: FlavorCount[] | null
+}
+
 export interface CoffeeDetail extends Coffee {
   distribution?: number[]
   groupStats?: GroupStats[]
+  /** Absent on sealed doors. */
+  flavors?: Flavors
 }
+
 
 export interface RecipeFields {
   method: string
@@ -99,6 +117,8 @@ export interface Brew extends RecipeFields {
   grindSetting: string
   rating: number | null
   notes: string
+  /** Lowercase flavor tags. */
+  descriptors: string[]
   isPublic: boolean
   excludeFromGlobal: boolean
   brewedAt: string
@@ -113,6 +133,7 @@ export interface BrewInput extends RecipeFields {
   grindSetting: string
   rating: number | null
   notes: string
+  descriptors: string[]
   isPublic: boolean
   excludeFromGlobal: boolean
   brewedAt?: string
@@ -149,6 +170,7 @@ export interface Catalog {
   methods: string[]
   grinders: { model: string; type: string; stockBurrs: string; burrSizeMm?: number; burrGeometry: string }[]
   burrsets: string[]
+  flavors: { group: string; items: string[] }[]
 }
 
 // ---------- fetch ----------
