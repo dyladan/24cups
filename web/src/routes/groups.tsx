@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import clsx from 'clsx'
-import { ArrowLeft, Check, Copy, EyeOff, Globe, Lock, Pencil, RefreshCw, UserMinus, Users } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Crown, EyeOff, Globe, Lock, Pencil, RefreshCw, UserMinus, Users } from 'lucide-react'
 import { api, discoverGroupsQuery, groupQuery, meQuery, myGroupsQuery, useApiMutation, type Group, type GroupDetail } from '../api'
 import { BrewCard } from '../components/BrewCard'
 import { Empty, ErrorText, Field, PageHeader, Spinner, Stars, Toggle } from '../components/ui'
@@ -196,7 +196,9 @@ export function GroupPage() {
   const leave = useApiMutation(() => api(`/groups/${groupId}/leave`, { method: 'POST' }), [['groups']])
   const del = useApiMutation(() => api(`/groups/${groupId}`, { method: 'DELETE' }), [['groups']])
   const kick = useApiMutation((uid: number) => api(`/groups/${groupId}/members/${uid}`, { method: 'DELETE' }), [['groups']])
+  const transfer = useApiMutation((userId: number) => api(`/groups/${groupId}/owner`, { method: 'PUT', json: { userId } }), [['groups']])
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [confirmOwner, setConfirmOwner] = useState<number | null>(null)
   const [editingName, setEditingName] = useState(false)
   const [sort, setSort] = useState<'rating' | 'day'>('rating')
 
@@ -247,7 +249,7 @@ export function GroupPage() {
           ))}
       </PageHeader>
       {g.description && <p className="-mt-3 mb-6 max-w-prose text-ink-2">{g.description}</p>}
-      <ErrorText error={join.error ?? leave.error ?? del.error ?? kick.error} />
+      <ErrorText error={join.error ?? leave.error ?? del.error ?? kick.error ?? transfer.error} />
 
       <div className="grid gap-8 lg:grid-cols-[1fr_340px]">
         <div className="min-w-0 space-y-8">
@@ -336,11 +338,38 @@ export function GroupPage() {
                     {m.userId === me?.id && editingName && (
                       <GroupNameForm g={g} current={m.groupName} profileName={m.profileName} onDone={() => setEditingName(false)} />
                     )}
+                    {confirmOwner === m.userId && (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-xs text-ink-2">Make {m.displayName} the owner? You’ll stay in the group as a member and can’t undo this yourself.</p>
+                        <div className="flex gap-2">
+                          <button
+                            className="btn btn-accent !px-3 !py-1 text-sm"
+                            disabled={transfer.isPending}
+                            onClick={() => transfer.mutate(m.userId, { onSuccess: () => setConfirmOwner(null) })}
+                          >
+                            Make owner
+                          </button>
+                          <button className="btn btn-ghost !px-3 !py-1 text-sm" onClick={() => setConfirmOwner(null)}>
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  {isOwner && m.userId !== me?.id && (
-                    <button className="text-ink-3 hover:text-red-600" onClick={() => kick.mutate(m.userId)} aria-label={`Remove ${m.displayName}`} title="Remove from group">
-                      <UserMinus size={16} />
-                    </button>
+                  {isOwner && m.userId !== me?.id && confirmOwner !== m.userId && (
+                    <>
+                      <button
+                        className="text-ink-3 hover:text-ink"
+                        onClick={() => (transfer.reset(), setConfirmOwner(m.userId))}
+                        aria-label={`Make ${m.displayName} the owner`}
+                        title="Make owner"
+                      >
+                        <Crown size={16} />
+                      </button>
+                      <button className="text-ink-3 hover:text-red-600" onClick={() => kick.mutate(m.userId)} aria-label={`Remove ${m.displayName}`} title="Remove from group">
+                        <UserMinus size={16} />
+                      </button>
+                    </>
                   )}
                 </li>
               ))}

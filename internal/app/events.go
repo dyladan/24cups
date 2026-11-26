@@ -119,6 +119,18 @@ func (b *broker) publish(ev event) {
 	}
 }
 
+// closeUser ends every stream belonging to userID (used when the account is
+// deleted).
+func (b *broker) closeUser(userID int64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for sub := range b.subs {
+		if sub.userID == userID {
+			b.removeLocked(sub)
+		}
+	}
+}
+
 // closeAll ends every stream (used on shutdown so http.Server.Shutdown
 // doesn't wait on connections that never finish on their own).
 func (b *broker) closeAll() {
@@ -211,6 +223,11 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request, u *User) e
 			return nil
 		case data, ok := <-sub.ch:
 			if !ok {
+				// Stream ended by the server: deliver anything still queued
+				// (e.g. the "me" hint sent just before an account deletion).
+				if len(pending) > 0 && send() == nil {
+					rc.Flush()
+				}
 				return nil
 			}
 			var ev event

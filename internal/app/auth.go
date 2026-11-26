@@ -213,6 +213,41 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) error {
 	return noContent(w)
 }
 
+// deleteAccount permanently deletes the signed-in user. The body must repeat
+// the username as confirmation, and the user must not own any groups (they
+// hand them over or delete them first, so other members never lose a group as
+// a side effect). Foreign keys cascade the rest: sessions, passkeys, recovery
+// codes, brews, recipes, grinders, opens, favorites and memberships.
+func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request, u *User) error {
+	var in struct {
+		Username string `json:"username"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		return err
+	}
+	if !strings.EqualFold(strings.TrimSpace(in.Username), u.Username) {
+		return errf(400, "type your username to confirm")
+	}
+	// Checked in the DELETE itself so a group created concurrently can't be
+	// swept away by the groups.owner_id cascade.
+	res, err := s.db.ExecContext(r.Context(),
+		`DELETE FROM users WHERE id = ? AND NOT EXISTS(SELECT 1 FROM groups WHERE owner_id = ?)`, u.ID, u.ID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errf(409, "you still own groups; make someone else the owner or delete them first")
+	}
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: s.secureCookies, SameSite: http.SameSiteLaxMode})
+	// Other tabs and devices: tell them to recheck who's signed in, then end
+	// their live-update streams. Everyone else refetches groups and coffees,
+	// which no longer include this user's brews or memberships.
+	s.notifyUser(r, u, keyMe)
+	s.events.closeUser(u.ID)
+	s.notify(r, keyGroups, keyCoffees)
+	return noContent(w)
+}
+
 func (s *Server) me(w http.ResponseWriter, r *http.Request, u *User) error {
 	writeJSON(w, 200, u)
 	return nil

@@ -406,7 +406,7 @@ func (s *Server) leaveGroup(w http.ResponseWriter, r *http.Request, u *User) err
 		return err
 	}
 	if g.OwnerID == u.ID {
-		return errf(409, "owners can't leave their group; delete it instead")
+		return errf(409, "owners can't leave their group; make someone else the owner or delete it")
 	}
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM group_members WHERE group_id = ? AND user_id = ?`, id, u.ID); err != nil {
 		return err
@@ -448,6 +448,64 @@ func (s *Server) removeMember(w http.ResponseWriter, r *http.Request, u *User) e
 		return errf(409, "you can't remove yourself")
 	}
 	if _, err := s.db.ExecContext(r.Context(), `DELETE FROM group_members WHERE group_id = ? AND user_id = ?`, id, uid); err != nil {
+		return err
+	}
+	s.notify(r, keyGroups, keyCoffees)
+	return noContent(w)
+}
+
+// transferOwnership makes another member the group's owner. The previous
+// owner stays on as an ordinary member.
+func (s *Server) transferOwnership(w http.ResponseWriter, r *http.Request, u *User) error {
+	id, err := pathID(r, "id")
+	if err != nil {
+		return err
+	}
+	var in struct {
+		UserID int64 `json:"userId"`
+	}
+	if err := readJSON(w, r, &in); err != nil {
+		return err
+	}
+	if _, err := s.requireOwner(r.Context(), u, id); err != nil {
+		return err
+	}
+	if in.UserID == u.ID {
+		return errf(409, "you already own this group")
+	}
+	var member bool
+	if err := s.rdb.QueryRowContext(r.Context(),
+		`SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?)`, id, in.UserID).Scan(&member); err != nil {
+		return err
+	}
+	if !member {
+		return errf(400, "the new owner must be a member of the group")
+	}
+	if err := s.capCheck(r, `SELECT COUNT(*) FROM groups WHERE owner_id = ?`, s.guards.cfg.MaxOwnedGroups,
+		"They already own the most groups anyone can (%d).", in.UserID); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(r.Context(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	// Conditional on the current owner and membership, so a concurrent
+	// transfer, kick or leave can't leave the group with a non-member owner.
+	res, err := tx.ExecContext(r.Context(), `UPDATE groups SET owner_id = ? WHERE id = ? AND owner_id = ?
+		AND EXISTS(SELECT 1 FROM group_members WHERE group_id = ? AND user_id = ?)`, in.UserID, id, u.ID, id, in.UserID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return errf(409, "the group changed; reload and try again")
+	}
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE group_members SET role = CASE user_id WHEN ? THEN 'owner' ELSE 'member' END WHERE group_id = ? AND user_id IN (?, ?)`,
+		in.UserID, id, in.UserID, u.ID); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
 		return err
 	}
 	s.notify(r, keyGroups, keyCoffees)

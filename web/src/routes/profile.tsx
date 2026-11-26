@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { KeyRound, LogOut, Pencil, Plus, Trash2, X } from 'lucide-react'
 import {
   api,
   catalogQuery,
   grindersQuery,
   meQuery,
+  myGroupsQuery,
   recipesQuery,
   securityQuery,
   useApiMutation,
@@ -22,7 +24,7 @@ import { formatDate, formatRatio, formatTemp, formatTime, plural } from '../lib/
 import { RecoveryCodes } from '../components/RecoveryCodes'
 import { addPasskey, defaultPasskeyName, passkeysUsableHere } from '../lib/passkeys'
 import { useThemePref, type ThemePref } from '../lib/theme'
-import { useLogout } from '../lib/logout'
+import { useLogout, useSignedOut } from '../lib/logout'
 import { visibilityOptions } from '../lib/visibility'
 
 // ---------- settings ----------
@@ -536,6 +538,88 @@ function Grinders() {
   )
 }
 
+// ---------- delete account ----------
+
+function DeleteAccount({ me }: { me: User }) {
+  const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
+  const signedOut = useSignedOut()
+  const { data: groups } = useQuery({ ...myGroupsQuery, enabled: open })
+  const owned = groups?.filter((g) => g.role === 'owner') ?? []
+  const del = useApiMutation(() => api('/me', { method: 'DELETE', json: { username: typed } }))
+  const matches = typed.trim().toLowerCase() === me.username.toLowerCase()
+  const close = () => (setOpen(false), setTyped(''), del.reset())
+
+  return (
+    <section className="card space-y-4 p-5">
+      <h2 className="display text-xl">Delete account</h2>
+      {!open ? (
+        <>
+          <p className="text-xs text-ink-3">Permanently delete your account and everything in it. This can’t be undone.</p>
+          <button type="button" className="btn btn-ghost w-full" onClick={() => setOpen(true)}>
+            <Trash2 size={16} /> Delete account…
+          </button>
+        </>
+      ) : !groups ? (
+        <Spinner />
+      ) : owned.length > 0 ? (
+        <>
+          <p className="text-sm text-ink-2">
+            You own {owned.length === 1 ? 'a group' : `${owned.length} groups`}. Before you can delete your account, make another member the
+            owner (the crown next to their name) or delete the group:
+          </p>
+          <ul className="list-disc space-y-1 pl-5 text-sm">
+            {owned.map((g) => (
+              <li key={g.id}>
+                <Link to="/groups/$groupId" params={{ groupId: g.id }} className="font-semibold underline">
+                  {g.name}
+                </Link>{' '}
+                <span className="text-ink-3">({plural(g.memberCount, 'member')})</span>
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="btn btn-ghost w-full" onClick={close}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <form
+          className="space-y-3"
+          onSubmit={(e: FormEvent) => {
+            e.preventDefault()
+            if (matches) del.mutate(undefined, { onSuccess: signedOut })
+          }}
+        >
+          <p className="text-sm text-ink-2">
+            This deletes your brews, ratings, recipes, grinders, passkeys and group memberships right away. Your username becomes free for
+            anyone to take.
+          </p>
+          <Field label={`Type ${me.username} to confirm`}>
+            <input
+              className="input"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={typed}
+              onChange={(e) => setTyped(e.target.value)}
+              required
+            />
+          </Field>
+          <ErrorText error={del.error} />
+          <div className="flex gap-2">
+            <button className="btn btn-danger flex-1" disabled={!matches || del.isPending}>
+              {del.isPending ? 'Deleting…' : 'Delete my account'}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  )
+}
+
 export function ProfilePage() {
   const { data: me } = useQuery(meQuery)
   if (!me) return <Spinner />
@@ -550,6 +634,7 @@ export function ProfilePage() {
         <div className="space-y-6">
           <Settings me={me} />
           <SignInSecurity me={me} />
+          <DeleteAccount me={me} />
         </div>
       </div>
     </>

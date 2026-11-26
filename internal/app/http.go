@@ -190,6 +190,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/auth/logout", s.h(s.logout))
 	m.HandleFunc("GET /api/auth/me", s.authed(s.me))
 	m.HandleFunc("PATCH /api/me", s.authed(s.updateMe))
+	m.HandleFunc("DELETE /api/me", s.authed(s.deleteAccount))
 	m.HandleFunc("POST /api/me/password", s.authed(s.changePassword))
 	m.HandleFunc("DELETE /api/me/password", s.authed(s.removePassword))
 
@@ -253,6 +254,7 @@ func (s *Server) routes() {
 	m.HandleFunc("POST /api/groups/{id}/invite-code", s.authed(s.regenerateInvite))
 	m.HandleFunc("PUT /api/groups/{id}/name", s.authed(s.setGroupName))
 	m.HandleFunc("DELETE /api/groups/{id}/members/{userId}", s.authed(s.removeMember))
+	m.HandleFunc("PUT /api/groups/{id}/owner", s.authed(s.transferOwnership))
 
 	m.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
